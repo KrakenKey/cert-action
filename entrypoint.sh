@@ -57,12 +57,12 @@ download_cli() {
   checksums_url="https://github.com/krakenkey/cli/releases/download/${version}/checksums.txt"
 
   echo "::group::Downloading krakenkey-cli ${version} (${os}/${arch})"
-  curl -fsSL "${download_url}" -o /tmp/cli.tar.gz
+  curl -fsSL "${download_url}" -o "/tmp/${binary_name}"
   curl -fsSL "${checksums_url}" -o /tmp/checksums.txt
 
   # Verify checksum
   (cd /tmp && grep "${binary_name}" checksums.txt | sha256sum -c -)
-  tar -xzf /tmp/cli.tar.gz -C /tmp krakenkey
+  tar -xzf "/tmp/${binary_name}" -C /tmp krakenkey
   chmod +x /tmp/krakenkey
   echo "::endgroup::"
 
