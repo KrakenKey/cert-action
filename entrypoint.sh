@@ -52,7 +52,7 @@ download_cli() {
     echo "::debug::Resolved latest CLI version: ${version}"
   fi
 
-  binary_name="krakenkey-cli_${version#v}_${os}_${arch}.tar.gz"
+  binary_name="krakenkey_${version#v}_${os}_${arch}.tar.gz"
   download_url="https://github.com/krakenkey/cli/releases/download/${version}/${binary_name}"
   checksums_url="https://github.com/krakenkey/cli/releases/download/${version}/checksums.txt"
 
