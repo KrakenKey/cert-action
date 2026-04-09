@@ -7,7 +7,7 @@ branding:
 
 inputs:
   api-key:
-    description: 'KrakenKey API key (starts with kk_). Use ${{ secrets.KRAKENKEY_API_KEY }}'
+    description: 'KrakenKey API key (starts with kk_). Store as KRAKENKEY_API_KEY in repository secrets.'
     required: true
   api-url:
     description: 'KrakenKey API base URL'
