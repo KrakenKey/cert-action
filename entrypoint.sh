@@ -66,7 +66,7 @@ download_cli() {
   chmod +x /tmp/krakenkey
   echo "::endgroup::"
 
-  echo "/tmp" >> "${GITHUB_PATH}"
+  export PATH="/tmp:${PATH}"
 }
 
 # ── 4. Execute command ───────────────────────────────────────────
