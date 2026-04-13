@@ -72,20 +72,20 @@ download_cli() {
 # ── 4. Execute command ───────────────────────────────────────────
 execute_issue() {
   local args=(
-    cert issue
     --api-url "${INPUT_API_URL}"
     --output json
     --no-color
+    cert issue
     --domain "${INPUT_DOMAIN}"
     --key-type "${INPUT_KEY_TYPE}"
-    --auto-renew="${INPUT_AUTO_RENEW}"
-    --wait="${INPUT_WAIT}"
     --poll-interval "${INPUT_POLL_INTERVAL}"
     --poll-timeout "${INPUT_POLL_TIMEOUT}"
     --key-out "${INPUT_KEY_PATH}"
     --csr-out "${INPUT_CSR_PATH}"
     --out "${INPUT_CERT_PATH}"
   )
+  [[ "${INPUT_AUTO_RENEW}" == "true" ]] && args+=(--auto-renew)
+  [[ "${INPUT_WAIT}" == "true" ]] && args+=(--wait)
   [[ -n "${INPUT_SAN}" ]] && args+=(--san "${INPUT_SAN}")
   [[ -n "${INPUT_SUBJECT_ORG}" ]] && args+=(--org "${INPUT_SUBJECT_ORG}")
   [[ -n "${INPUT_SUBJECT_OU}" ]] && args+=(--ou "${INPUT_SUBJECT_OU}")
@@ -95,12 +95,14 @@ execute_issue() {
 }
 
 execute_renew() {
-  local result
-  result=$(KK_API_KEY="${INPUT_API_KEY}" krakenkey cert renew "${INPUT_CERT_ID}" \
+  local result wait_args=()
+  [[ "${INPUT_WAIT}" == "true" ]] && wait_args+=(--wait)
+  result=$(KK_API_KEY="${INPUT_API_KEY}" krakenkey \
     --api-url "${INPUT_API_URL}" \
     --output json \
     --no-color \
-    --wait="${INPUT_WAIT}" \
+    cert renew "${INPUT_CERT_ID}" \
+    "${wait_args[@]}" \
     --poll-interval "${INPUT_POLL_INTERVAL}" \
     --poll-timeout "${INPUT_POLL_TIMEOUT}")
   echo "${result}"
@@ -108,19 +110,21 @@ execute_renew() {
   local status
   status=$(echo "${result}" | jq -r '.status')
   if [[ "${status}" == "issued" ]]; then
-    KK_API_KEY="${INPUT_API_KEY}" krakenkey cert download "${INPUT_CERT_ID}" \
+    KK_API_KEY="${INPUT_API_KEY}" krakenkey \
       --api-url "${INPUT_API_URL}" \
       --output json \
       --no-color \
+      cert download "${INPUT_CERT_ID}" \
       --out "${INPUT_CERT_PATH}" > /dev/null
   fi
 }
 
 execute_download() {
-  KK_API_KEY="${INPUT_API_KEY}" krakenkey cert download "${INPUT_CERT_ID}" \
+  KK_API_KEY="${INPUT_API_KEY}" krakenkey \
     --api-url "${INPUT_API_URL}" \
     --output json \
     --no-color \
+    cert download "${INPUT_CERT_ID}" \
     --out "${INPUT_CERT_PATH}"
 }
 
@@ -139,10 +143,11 @@ set_outputs() {
 
   if [[ "${status}" == "issued" ]]; then
     local details
-    details=$(KK_API_KEY="${INPUT_API_KEY}" krakenkey cert show "${cert_id}" \
+    details=$(KK_API_KEY="${INPUT_API_KEY}" krakenkey \
       --api-url "${INPUT_API_URL}" \
       --output json \
-      --no-color 2>/dev/null || true)
+      --no-color \
+      cert show "${cert_id}" 2>/dev/null || true)
 
     if [[ -n "${details}" ]]; then
       {
