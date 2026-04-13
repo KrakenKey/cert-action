@@ -76,35 +76,35 @@ execute_issue() {
     --output json
     --no-color
     cert issue
-    -domain "${INPUT_DOMAIN}"
-    -key-type "${INPUT_KEY_TYPE}"
-    -poll-interval "${INPUT_POLL_INTERVAL}"
-    -poll-timeout "${INPUT_POLL_TIMEOUT}"
-    -key-out "${INPUT_KEY_PATH}"
-    -csr-out "${INPUT_CSR_PATH}"
-    -out "${INPUT_CERT_PATH}"
+    --domain "${INPUT_DOMAIN}"
+    --key-type "${INPUT_KEY_TYPE}"
+    --poll-interval "${INPUT_POLL_INTERVAL}"
+    --poll-timeout "${INPUT_POLL_TIMEOUT}"
+    --key-out "${INPUT_KEY_PATH}"
+    --csr-out "${INPUT_CSR_PATH}"
+    --out "${INPUT_CERT_PATH}"
   )
-  [[ "${INPUT_AUTO_RENEW}" == "true" ]] && args+=(-auto-renew)
-  [[ "${INPUT_WAIT}" == "true" ]] && args+=(-wait)
-  [[ -n "${INPUT_SAN}" ]] && args+=(-san "${INPUT_SAN}")
-  [[ -n "${INPUT_SUBJECT_ORG}" ]] && args+=(-org "${INPUT_SUBJECT_ORG}")
-  [[ -n "${INPUT_SUBJECT_OU}" ]] && args+=(-ou "${INPUT_SUBJECT_OU}")
-  [[ -n "${INPUT_SUBJECT_COUNTRY}" ]] && args+=(-country "${INPUT_SUBJECT_COUNTRY}")
+  [[ "${INPUT_AUTO_RENEW}" == "true" ]] && args+=(--auto-renew)
+  [[ "${INPUT_WAIT}" == "true" ]] && args+=(--wait)
+  [[ -n "${INPUT_SAN}" ]] && args+=(--san "${INPUT_SAN}")
+  [[ -n "${INPUT_SUBJECT_ORG}" ]] && args+=(--org "${INPUT_SUBJECT_ORG}")
+  [[ -n "${INPUT_SUBJECT_OU}" ]] && args+=(--ou "${INPUT_SUBJECT_OU}")
+  [[ -n "${INPUT_SUBJECT_COUNTRY}" ]] && args+=(--country "${INPUT_SUBJECT_COUNTRY}")
 
   KK_API_KEY="${INPUT_API_KEY}" krakenkey "${args[@]}"
 }
 
 execute_renew() {
   local result wait_args=()
-  [[ "${INPUT_WAIT}" == "true" ]] && wait_args+=(-wait)
+  [[ "${INPUT_WAIT}" == "true" ]] && wait_args+=(--wait)
   result=$(KK_API_KEY="${INPUT_API_KEY}" krakenkey \
     --api-url "${INPUT_API_URL}" \
     --output json \
     --no-color \
     cert renew "${INPUT_CERT_ID}" \
     "${wait_args[@]}" \
-    -poll-interval "${INPUT_POLL_INTERVAL}" \
-    -poll-timeout "${INPUT_POLL_TIMEOUT}")
+    --poll-interval "${INPUT_POLL_INTERVAL}" \
+    --poll-timeout "${INPUT_POLL_TIMEOUT}")
   echo "${result}"
 
   local status
@@ -115,7 +115,7 @@ execute_renew() {
       --output json \
       --no-color \
       cert download "${INPUT_CERT_ID}" \
-      -out "${INPUT_CERT_PATH}" > /dev/null
+      --out "${INPUT_CERT_PATH}" > /dev/null
   fi
 }
 
@@ -125,7 +125,7 @@ execute_download() {
     --output json \
     --no-color \
     cert download "${INPUT_CERT_ID}" \
-    -out "${INPUT_CERT_PATH}"
+    --out "${INPUT_CERT_PATH}"
 }
 
 # ── 5. Parse output and set Action outputs ───────────────────────
