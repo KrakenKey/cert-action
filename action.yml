@@ -65,9 +65,17 @@ inputs:
     default: '10m'
 
   cert-path:
-    description: 'Path to save the certificate PEM'
+    description: 'Path to save the certificate PEM (leaf only)'
     required: false
     default: './cert.pem'
+  chain-path:
+    description: 'Path to save the intermediate chain PEM'
+    required: false
+    default: './chain.pem'
+  fullchain-path:
+    description: 'Path to save the full chain PEM (leaf + intermediates)'
+    required: false
+    default: './fullchain.pem'
   key-path:
     description: 'Path to save the private key PEM (issue only)'
     required: false
@@ -114,8 +122,14 @@ outputs:
     description: 'Key size (e.g., 256, 2048)'
     value: ${{ steps.run.outputs.key-size }}
   cert-path:
-    description: 'Absolute path to the saved certificate PEM'
+    description: 'Absolute path to the saved certificate PEM (leaf only)'
     value: ${{ steps.run.outputs.cert-path }}
+  chain-path:
+    description: 'Absolute path to the saved intermediate chain PEM'
+    value: ${{ steps.run.outputs.chain-path }}
+  fullchain-path:
+    description: 'Absolute path to the saved full chain PEM (leaf + intermediates)'
+    value: ${{ steps.run.outputs.fullchain-path }}
   key-path:
     description: 'Absolute path to the saved private key PEM (issue only)'
     value: ${{ steps.run.outputs.key-path }}
@@ -145,6 +159,8 @@ runs:
         INPUT_POLL_INTERVAL: ${{ inputs.poll-interval }}
         INPUT_POLL_TIMEOUT: ${{ inputs.poll-timeout }}
         INPUT_CERT_PATH: ${{ inputs.cert-path }}
+        INPUT_CHAIN_PATH: ${{ inputs.chain-path }}
+        INPUT_FULLCHAIN_PATH: ${{ inputs.fullchain-path }}
         INPUT_KEY_PATH: ${{ inputs.key-path }}
         INPUT_CSR_PATH: ${{ inputs.csr-path }}
         INPUT_CLI_VERSION: ${{ inputs.cli-version }}
