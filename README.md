@@ -35,7 +35,9 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 | `wait` | Wait for issuance/renewal to complete | No | `true` |
 | `poll-interval` | Poll interval when waiting (Go duration, e.g., `15s`) | No | `15s` |
 | `poll-timeout` | Maximum time to wait (Go duration, e.g., `10m`) | No | `10m` |
-| `cert-path` | Path to save the certificate PEM | No | `./cert.pem` |
+| `cert-path` | Path to save the leaf certificate PEM | No | `./cert.pem` |
+| `chain-path` | Path to save the intermediate chain PEM | No | `./chain.pem` |
+| `fullchain-path` | Path to save the full chain PEM (leaf + intermediates) | No | `./fullchain.pem` |
 | `key-path` | Path to save the private key PEM (issue only) | No | `./key.pem` |
 | `csr-path` | Path to save the CSR PEM (issue only) | No | `./csr.pem` |
 | `cli-version` | `krakenkey-cli` version to use (e.g., `v0.1.0`, or `latest`) | No | `latest` |
@@ -54,7 +56,9 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 | `fingerprint` | SHA-256 fingerprint |
 | `key-type` | Key type used (e.g., `ECDSA`) |
 | `key-size` | Key size (e.g., `256`, `2048`) |
-| `cert-path` | Absolute path to the saved certificate PEM |
+| `cert-path` | Absolute path to the saved leaf certificate PEM |
+| `chain-path` | Absolute path to the saved intermediate chain PEM |
+| `fullchain-path` | Absolute path to the saved full chain PEM (leaf + intermediates) |
 | `key-path` | Absolute path to the saved private key PEM (issue only) |
 | `csr-path` | Absolute path to the saved CSR PEM (issue only) |
 
@@ -62,19 +66,19 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 
 ### `issue` (default)
 
-Generates a CSR locally, submits it to the KrakenKey API, waits for issuance (~4 minutes), and saves the certificate + private key to the runner filesystem.
+Generates a CSR locally, submits it to the KrakenKey API, waits for issuance (~4 minutes), and saves the certificate, intermediate chain, and full chain to the runner filesystem.
 
 **Required inputs:** `api-key`, `domain`
 
 ### `renew`
 
-Triggers renewal of an existing certificate by ID, waits for completion, and downloads the new certificate.
+Triggers renewal of an existing certificate by ID, waits for completion, and downloads the new certificate along with its chain files.
 
 **Required inputs:** `api-key`, `cert-id`
 
 ### `download`
 
-Downloads an already-issued certificate by ID. No issuance, no waiting.
+Downloads an already-issued certificate by ID. Saves the leaf cert, intermediate chain (`chain-path`), and full chain (`fullchain-path`). No issuance, no waiting.
 
 **Required inputs:** `api-key`, `cert-id`
 
@@ -107,6 +111,27 @@ jobs:
         run: |
           scp ${{ steps.cert.outputs.cert-path }} server:/etc/ssl/certs/
           scp ${{ steps.cert.outputs.key-path }} server:/etc/ssl/private/
+          ssh server 'systemctl reload nginx'
+```
+
+</details>
+
+<details>
+<summary>Deploy with full chain (nginx, HAProxy)</summary>
+
+```yaml
+      - name: Issue TLS certificate
+        id: cert
+        uses: krakenkey/cert-action@v1
+        with:
+          api-key: ${{ secrets.KRAKENKEY_API_KEY }}
+          domain: api.example.com
+
+      - name: Deploy fullchain + key
+        run: |
+          # Use fullchain.pem for nginx ssl_certificate directive
+          scp ${{ steps.cert.outputs.fullchain-path }} server:/etc/ssl/certs/fullchain.pem
+          scp ${{ steps.cert.outputs.key-path }} server:/etc/ssl/private/key.pem
           ssh server 'systemctl reload nginx'
 ```
 
@@ -158,6 +183,8 @@ jobs:
           command: download
           cert-id: '42'
           cert-path: ./cert.pem
+          chain-path: ./chain.pem
+          fullchain-path: ./fullchain.pem
 ```
 
 </details>
@@ -236,6 +263,18 @@ jobs:
 ```
 
 </details>
+
+## Certificate Chain Files
+
+Every `issue`, `renew`, and `download` operation produces three certificate files:
+
+| File | Input | Content | Use case |
+|------|-------|---------|----------|
+| `cert-path` | `cert-path` | Leaf certificate only | Peer verification, inspection |
+| `chain-path` | `chain-path` | Intermediate CA chain only | Stapling, manual chain assembly |
+| `fullchain-path` | `fullchain-path` | Leaf + intermediates (concatenated) | nginx `ssl_certificate`, HAProxy, most servers |
+
+Most web servers (nginx, Caddy, HAProxy) expect the **full chain** in the certificate file. Use `${{ steps.cert.outputs.fullchain-path }}` for these deployments.
 
 ## Security
 
