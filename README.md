@@ -21,7 +21,7 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `api-key` | KrakenKey API key (starts with `kk_`). Use `${{ secrets.KRAKENKEY_API_KEY }}` | Yes | — |
+| `api-key` | KrakenKey API key (starts with `kk_`). Store as `KRAKENKEY_API_KEY` in repository secrets. | Yes | — |
 | `api-url` | KrakenKey API base URL | No | `https://api.krakenkey.io` |
 | `command` | Action to perform: `issue`, `renew`, or `download` | No | `issue` |
 | `domain` | Primary domain (CN) for the certificate | `issue` only | — |
@@ -35,7 +35,9 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 | `wait` | Wait for issuance/renewal to complete | No | `true` |
 | `poll-interval` | Poll interval when waiting (Go duration, e.g., `15s`) | No | `15s` |
 | `poll-timeout` | Maximum time to wait (Go duration, e.g., `10m`) | No | `10m` |
-| `cert-path` | Path to save the certificate PEM | No | `./cert.pem` |
+| `cert-path` | Path to save the leaf certificate PEM | No | `./cert.pem` |
+| `chain-path` | Path to save the intermediate CA chain PEM | No | `./chain.pem` |
+| `fullchain-path` | Path to save the full chain PEM (leaf + intermediates) | No | `./fullchain.pem` |
 | `key-path` | Path to save the private key PEM (issue only) | No | `./key.pem` |
 | `csr-path` | Path to save the CSR PEM (issue only) | No | `./csr.pem` |
 | `cli-version` | `krakenkey-cli` version to use (e.g., `v0.1.0`, or `latest`) | No | `latest` |
@@ -54,7 +56,9 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 | `fingerprint` | SHA-256 fingerprint |
 | `key-type` | Key type used (e.g., `ECDSA`) |
 | `key-size` | Key size (e.g., `256`, `2048`) |
-| `cert-path` | Absolute path to the saved certificate PEM |
+| `cert-path` | Absolute path to the saved leaf certificate PEM |
+| `chain-path` | Absolute path to the saved intermediate chain PEM |
+| `fullchain-path` | Absolute path to the saved full chain PEM (leaf + intermediates) |
 | `key-path` | Absolute path to the saved private key PEM (issue only) |
 | `csr-path` | Absolute path to the saved CSR PEM (issue only) |
 
@@ -62,21 +66,35 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 
 ### `issue` (default)
 
-Generates a CSR locally, submits it to the KrakenKey API, waits for issuance (~4 minutes), and saves the certificate + private key to the runner filesystem.
+Generates a CSR locally, submits it to the KrakenKey API, waits for issuance (~4 minutes), and saves the leaf certificate, private key, intermediate chain, and full chain to the runner filesystem.
 
 **Required inputs:** `api-key`, `domain`
 
 ### `renew`
 
-Triggers renewal of an existing certificate by ID, waits for completion, and downloads the new certificate.
+Triggers renewal of an existing certificate by ID, waits for completion, and downloads the new certificate and chain files.
 
 **Required inputs:** `api-key`, `cert-id`
 
 ### `download`
 
-Downloads an already-issued certificate by ID. No issuance, no waiting.
+Downloads an already-issued certificate by ID. No issuance, no waiting. Downloads the leaf cert, intermediate chain, and full chain.
 
 **Required inputs:** `api-key`, `cert-id`
+
+## Certificate Chain Files
+
+The `issue`, `renew`, and `download` commands all produce three certificate output files:
+
+| File | Input | Default | Contents |
+|------|-------|---------|----------|
+| Leaf certificate | `cert-path` | `./cert.pem` | End-entity certificate only |
+| Intermediate chain | `chain-path` | `./chain.pem` | Intermediate CA certificates |
+| Full chain | `fullchain-path` | `./fullchain.pem` | Leaf + intermediates |
+
+Most web servers (nginx, Apache, HAProxy, Caddy) expect the **full chain**. Use `fullchain-path` in your deploy steps. Use `cert-path` alone only if your server manages the chain separately.
+
+The `cert-path`, `chain-path`, and `fullchain-path` outputs give absolute paths suitable for use in downstream `scp`, `kubectl`, or secrets manager upload steps.
 
 ## Usage Examples
 
@@ -107,6 +125,26 @@ jobs:
         run: |
           scp ${{ steps.cert.outputs.cert-path }} server:/etc/ssl/certs/
           scp ${{ steps.cert.outputs.key-path }} server:/etc/ssl/private/
+          ssh server 'systemctl reload nginx'
+```
+
+</details>
+
+<details>
+<summary>Deploy with full chain (nginx, HAProxy)</summary>
+
+```yaml
+      - name: Issue certificate
+        id: cert
+        uses: krakenkey/cert-action@v1
+        with:
+          api-key: ${{ secrets.KRAKENKEY_API_KEY }}
+          domain: api.example.com
+
+      - name: Deploy leaf + chain to nginx
+        run: |
+          scp ${{ steps.cert.outputs.fullchain-path }} server:/etc/ssl/certs/api.pem
+          scp ${{ steps.cert.outputs.key-path }} server:/etc/ssl/private/api.key
           ssh server 'systemctl reload nginx'
 ```
 
