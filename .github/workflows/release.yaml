@@ -2,7 +2,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   release:
@@ -11,11 +11,53 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve previous tag
+        id: prev
+        run: |
+          PREV=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+          echo "tag=${PREV:-}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build release notes
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          PREV="${{ steps.prev.outputs.tag }}"
+
+          {
+            echo 'body<<RELEASE_EOF'
+            echo "## KrakenKey TLS Certificate Action ${VERSION}"
+            echo ""
+            echo '```yaml'
+            echo "- uses: krakenkey/cert-action@${VERSION}"
+            echo '  with:'
+            echo "    api-key: \${{ secrets.KRAKENKEY_API_KEY }}"
+            echo "    domain: 'example.com'"
+            echo '```'
+            echo ""
+            echo "## What's Changed"
+            echo ""
+            if [[ -n "${PREV}" ]]; then
+              git log --pretty=format:'- %s' "${PREV}..${GITHUB_REF_NAME}" -- | grep -v '^- docs:' | grep -v '^- chore:' || true
+              echo ""
+              echo ""
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV}...${VERSION}"
+            else
+              git log --pretty=format:'- %s' "${GITHUB_REF_NAME}" -- | grep -v '^- docs:' | grep -v '^- chore:' || true
+              echo ""
+              echo ""
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/commits/${VERSION}"
+            fi
+            echo 'RELEASE_EOF'
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
-          generate_release_notes: true
+          body: ${{ steps.notes.outputs.body }}
+          make_latest: true
 
       - name: Update major version tag
         run: |
