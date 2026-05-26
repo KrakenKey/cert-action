@@ -6,6 +6,20 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Developer Notes
+- Release workflow (`.github/workflows/release.yaml`) now restricts the trigger to semver tags matching `v[0-9]+.[0-9]+.[0-9]+`. Major-version pointer tags (e.g., `v1`) no longer re-trigger the pipeline.
+- GitHub release notes are now auto-generated using `.github/release.yaml` changelog category labels (Features, Bug Fixes, Other Changes).
+- Each release is now automatically marked as `latest` via `make_latest: true`.
+
+### Compatibility Advisory — CAA Records (March 2027)
+CA/Browser Forum **ballot SC-098v2** (passed 2026-05-13) requires all public CAs to enforce RFC 8657 CAA parameter extensions (`accounturi`, `validationmethods`) by **March 2027**. KrakenKey cert-action issues certificates via Let's Encrypt using ACME DNS-01.
+
+If your domain's CAA record sets `validationmethods`, ensure `dns-01` is included:
+```
+0 issue "letsencrypt.org; validationmethods=dns-01"
+```
+A record restricting to `http-01` or `tls-alpn-01` only will block issuance via this action once enforcement begins. CAA records without the `validationmethods` parameter are unaffected.
+
 ---
 
 ## [v1.1.0] — 2026-05-18
