@@ -6,6 +6,20 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Release Pipeline
+
+- Release workflow now triggers only on full semver tags (`v[0-9]+.[0-9]+.[0-9]+`); major-version pointer tags (e.g. `v1`) no longer re-trigger the release.
+- Structured release notes auto-generated using `.github/release.yaml` label categories (Features, Bug Fixes, Other Changes).
+- Each release is automatically marked as latest on GitHub via `make_latest: true`.
+
+### Advisory — CA/B Forum SC-098v2 (enforcement: March 2027)
+
+CA/B Forum ballot SC-098v2 passed 2026-05-13. All public CAs must enforce RFC 8657 CAA `accounturi` and `validationmethods` parameter extensions by March 2027. KrakenKey uses Let's Encrypt ACME DNS-01. If your DNS CAA record sets `validationmethods`, it must include `dns-01` for issuance to succeed after the enforcement date. CAA records without these parameters are unaffected.
+
+### Advisory — Chrome EKU Separation (effective June 15, 2026)
+
+Chrome Root Program Policy v1.8 requires TLS intermediates to carry only `serverAuth` EKU — intermediates that also include `clientAuth` are no longer valid for public TLS. Commercial CAs retired multi-purpose intermediates in May/June 2026. **Let's Encrypt intermediates (E5/E6/R10/R11) are dedicated TLS-only and are not affected.** Certificates issued via cert-action through KrakenKey and Let's Encrypt are fully compliant.
+
 ---
 
 ## [v1.1.0] — 2026-05-18
