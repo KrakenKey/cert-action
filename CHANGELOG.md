@@ -6,6 +6,23 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- Release workflow restricted to tag-triggered runs (`v*.*.*` pattern only); manual dispatch and branch push triggers no longer create releases.
+- Release notes use structured Added / Changed / Fixed sections and publish with `make_latest: true`.
+
+### PKI Advisory — SC-098v2 (CA/B Forum, RFC 8657 CAA, enforcement March 2027)
+
+CA/B Forum Ballot SC-098v2 will require `accounturi` and `validationmethods` CAA parameters for all new issuances from March 2027. KrakenKey uses Let's Encrypt with `dns-01` challenges; no action is required for this action itself, but users who manage their own CAA records should add the required parameters before March 2027. See [RFC 8657](https://www.rfc-editor.org/rfc/rfc8657) for syntax.
+
+### PKI Advisory — Chrome EKU Separation (effective 2026-06-15)
+
+Chrome Root Program Policy v1.8, Section 1.3.2: TLS intermediates must be `serverAuth`-only. DigiCert and Sectigo intermediates that bundled `clientAuth` require re-issuance. Let's Encrypt E5/E6/R10/R11 intermediates are already compliant; certificates issued via this action are unaffected.
+
+### PKI Advisory — Certificate Transparency Mandatory Logging (effective 2026-06-15)
+
+Chrome Root Program Policy v1.8, Section 1.3.4.1: precertificate CT logging is mandatory before issuance for all Root Program participants. DigiCert removed CT opt-out settings from CertCentral on 2026-06-01. Let's Encrypt has always logged all certificates to CT by default; certificates issued via this action are already compliant. Certificate hostnames and SAN values are permanently public record in CT logs — this is by design for all publicly-trusted certificates.
+
 ---
 
 ## [v1.1.0] — 2026-05-18
