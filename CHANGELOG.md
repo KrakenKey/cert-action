@@ -6,6 +6,15 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+- Release pipeline: trigger restricted to `v[0-9]+.[0-9]+.[0-9]+` tags only; release notes auto-generated from CHANGELOG; `make_latest: true`.
+
+### Advisory
+- **SC-098v2 — CAA RFC 8657 Parameters**: `validationmethods` and `accounturi` CAA parameters; CA enforcement deadline March 2027; no cert-action config change required today.
+- **Chrome EKU Separation**: serverAuth/clientAuth EKU separation enforced 2026-06-15; affects DigiCert/Sectigo chains; Let's Encrypt (used by this action) unaffected.
+- **CT Mandatory Logging**: enforced 2026-06-15; DigiCert opt-out removed 2026-06-01; Let's Encrypt always CT-logged, no action required.
+- **LE Merkle Tree Certificates**: announced 2026-06-03; staging late 2026, production 2027; MTC breaks the `chain.pem`/`fullchain.pem` model — `chain-path` and `fullchain-path` outputs will need updates before the LE production rollout.
+
 ---
 
 ## [v1.1.0] — 2026-05-18
