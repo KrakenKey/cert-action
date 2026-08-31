@@ -97,8 +97,11 @@ execute_issue() {
 }
 
 execute_renew() {
-  local result wait_args=()
+  local result rc=0 wait_args=()
   [[ "${INPUT_WAIT}" == "true" ]] && wait_args+=(--wait)
+  # Capture output but never let a CLI failure abort before we can print it.
+  # Under set -e, a plain result=$(...) exits on failure and the CLI's error
+  # message (stdout in --output json mode) is lost with it.
   result=$(KK_API_KEY="${INPUT_API_KEY}" krakenkey \
     --api-url "${INPUT_API_URL}" \
     --output json \
@@ -106,12 +109,19 @@ execute_renew() {
     cert renew "${INPUT_CERT_ID}" \
     "${wait_args[@]}" \
     --poll-interval "${INPUT_POLL_INTERVAL}" \
-    --poll-timeout "${INPUT_POLL_TIMEOUT}")
+    --poll-timeout "${INPUT_POLL_TIMEOUT}") || rc=$?
   echo "${result}"
+  if [[ "${rc}" -ne 0 ]]; then
+    echo "::error::krakenkey cert renew exited with code ${rc}"
+    exit "${rc}"
+  fi
 
+  # With --wait the CLI prints the initial response ("renewing") and only
+  # returns 0 once the renewal reached a good terminal state, so success of
+  # the command is the signal. Without --wait, fall back to the reported status.
   local status
-  status=$(echo "${result}" | jq -r '.status')
-  if [[ "${status}" == "issued" ]]; then
+  status=$(echo "${result}" | jq -r '.status' 2>/dev/null | head -n1 || true)
+  if [[ "${INPUT_WAIT}" == "true" || "${status}" == "issued" ]]; then
     KK_API_KEY="${INPUT_API_KEY}" krakenkey \
       --api-url "${INPUT_API_URL}" \
       --output json \
