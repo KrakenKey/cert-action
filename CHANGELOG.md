@@ -6,6 +6,13 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+---
+
+## [v1.2.0] — 2026-09-04
+
+### Fixed
+- `renew` no longer swallows CLI errors — failures during renewal are surfaced with the CLI's error output, and certificate downloads only run after the wait for issuance succeeds. (#25)
+
 ### Changed
 - Release pipeline: trigger restricted to `v[0-9]+.[0-9]+.[0-9]+` tags only; release notes auto-generated from CHANGELOG; `make_latest: true`.
 
@@ -14,6 +21,9 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 - **Chrome EKU Separation**: serverAuth/clientAuth EKU separation enforced 2026-06-15; affects DigiCert/Sectigo chains; Let's Encrypt (used by this action) unaffected.
 - **CT Mandatory Logging**: enforced 2026-06-15; DigiCert opt-out removed 2026-06-01; Let's Encrypt always CT-logged, no action required.
 - **LE Merkle Tree Certificates**: announced 2026-06-03; staging late 2026, production 2027; MTC breaks the `chain.pem`/`fullchain.pem` model — `chain-path` and `fullchain-path` outputs will need updates before the LE production rollout.
+
+### Build
+- `softprops/action-gh-release` bumped to v3.0.3 (Node24 runtime), SHA-pinned. (#26)
 
 ---
 
