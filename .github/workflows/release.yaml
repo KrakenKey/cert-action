@@ -33,7 +33,9 @@ jobs:
             echo '```yaml'
             echo "- uses: krakenkey/cert-action@${VERSION}"
             echo '  with:'
-            echo "    api-key: \${{ secrets.KRAKENKEY_API_KEY }}"
+            # printf assembles the literal '${{ ... }}' so the workflow parser
+            # doesn't substitute it as an (empty) expression before bash runs.
+            printf '    api-key: ${%s}\n' '{ secrets.KRAKENKEY_API_KEY }'
             echo "    domain: 'example.com'"
             echo '```'
             echo ""
