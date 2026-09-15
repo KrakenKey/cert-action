@@ -96,6 +96,8 @@ Most web servers (nginx, Apache, HAProxy, Caddy) expect the **full chain**. Use 
 
 The `cert-path`, `chain-path`, and `fullchain-path` outputs give absolute paths suitable for use in downstream `scp`, `kubectl`, or secrets manager upload steps.
 
+> **Deploy the full chain — do not rely on AIA chain repair.** If a server presents only the leaf, some clients reconstruct the chain by fetching the issuing intermediate from the certificate's `authorityInformationAccess` (AIA) `caIssuers` URL (Windows Schannel, macOS Security.framework, Chrome's built-in verifier) and some never do (OpenSSL, Go, Firefox, Java PKIX by default). That split is why a deployment can pass a browser spot-check and fail in `curl` or in a Go service with `unable to get local issuer certificate`. CA/Browser Forum ballot SC104 (passed 2026-09-03) relaxed AIA from MUST to SHOULD in subscriber certificates, so leaves may eventually carry no `caIssuers` URL and chain repair becomes unavailable everywhere. Using `fullchain-path` is correct today and stays correct; if you add a post-deploy verification step, use a client that does not fetch AIA.
+
 ## Usage Examples
 
 <details>
