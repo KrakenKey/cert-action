@@ -6,6 +6,16 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Documentation
+- **Certificate Chain Files**: added a note on AIA chain repair — which clients fetch the AIA `caIssuers` URL and which never do, why `fullchain-path` is the correct deploy artifact regardless, and to verify with a non-AIA-fetching client.
+
+### Advisory
+- **SC100 — DNSSEC Validation Consolidation**: CA/B Forum ballot passed 2026-08-06, shipped in Baseline Requirements v2.3.0 effective 2026-09-07. Consolidates DNSSEC validation language into BR §4.2.2.2 and clarifies that mandatory DNSSEC validation applies only to a CA's Primary Network Perspective, not the Remote Network Perspectives used for Multi-Perspective Issuance Corroboration. No behavior change for CAs and no action for this action; relevant if a workflow's `renew` step fails on a DNSSEC-signed zone, where a `SERVFAIL` from the CA's primary perspective (during a DS/DNSKEY rollover, say) is a hard issuance block.
+- **SC104 — AIA Relaxed to SHOULD**: CA/B Forum ballot passed unanimously 2026-09-03; IPR Review Period to 2026-10-03. `authorityInformationAccess` goes from MUST to SHOULD in the TLS subscriber certificate profile, and §7.1.2.7.7 gains an "If present" qualifier, so a compliant leaf may carry no `caIssuers` URL at all. No change to `chain-path` or `fullchain-path` behavior — both are populated from the chain KrakenKey delivers, not from an AIA fetch — but workflows deploying `cert-path` alone and relying on client-side chain repair should move to `fullchain-path`.
+- **Mozilla Root Store Policy v3.1**: effective 2026-07-01; adds mass revocation planning (ballot SC-089), CP/CPS documentation requirements, and a five-year root key age cap. No action for Let's Encrypt subscribers.
+- **HARICA CP/CPS drift, two chained mass revocations** (July 2026): a `clientAuth` EKU compliance lapse forced 66,105 revocations on 2026-07-20, followed by a missing OCSP AIA pointer incident forcing mass replacement by 2026-07-25. Not this action's issuer (Let's Encrypt), but it illustrates the operational case for CA-initiated renewal tolerance: workflows on a fixed `cron` absorb a forced mass renewal far worse than ones that also run on demand.
+- **FreeRDP certificate validation bypass (CVE-2026-66402)**: fixed in FreeRDP 3.29.0 (2026-08-01). Client-side hostname-matching flaws (embedded-NUL SAN truncation, CN fallback ignoring a non-matching SAN, IP-literal targets matched against DNS SAN). Not an issuance defect; relevant only if a workflow deploys certificates to a FreeRDP-based gateway such as Guacamole or Remmina.
+
 ---
 
 ## [v1.2.0] — 2026-09-04
