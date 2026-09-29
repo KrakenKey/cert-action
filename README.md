@@ -295,13 +295,30 @@ jobs:
 | `Certificate or resource not found` | Invalid `cert-id` | Check certificate ID in KrakenKey dashboard |
 | `Rate limited` | Too many API requests | Wait and retry, or upgrade your KrakenKey plan |
 | `Invalid api-key format` | API key doesn't start with `kk_` | Use the API key from your KrakenKey dashboard |
-| Timeout during issuance | DNS-01 challenge took too long | Check domain DNS configuration; increase `poll-timeout` |
+| `ACME challenge delegation missing` | No `_acme-challenge` CNAME for the domain | Create `_acme-challenge.<domain>` → `<domain-with-dashes>.acme.krakenkey.io`, then re-run. See [ACME challenge delegation](#acme-challenge-delegation) |
+| `ACME challenge delegation mismatch` | The `_acme-challenge` CNAME points somewhere else | Correct the CNAME target, then re-run |
+| Timeout during issuance | DNS-01 challenge took too long | Check domain DNS configuration; increase `poll-timeout`. A *missing* delegation no longer presents as a timeout — it fails fast with the error above |
+
+### ACME challenge delegation
+
+KrakenKey answers the ACME DNS-01 challenge in its own zone, so each domain needs a one-time CNAME delegating the challenge name. This is separate from the TXT record used for ownership verification, and issuance now checks it **before** creating an ACME order — so a missing or wrong record fails the step in seconds rather than timing out.
+
+| Domain | CNAME at | Target |
+|--------|----------|--------|
+| `example.com` | `_acme-challenge.example.com` | `example-com.acme.krakenkey.io` |
+| `api.example.com` | `_acme-challenge.api.example.com` | `api-example-com.acme.krakenkey.io` |
+| `*.example.com` | `_acme-challenge.example.com` | `example-com.acme.krakenkey.io` |
+
+The target is the domain with dots replaced by dashes, under the KrakenKey auth zone. A wildcard shares the base domain's record. CNAME chains are followed, so delegating through an intermediate name works.
+
+These are permanent failures: the job fails on the first attempt rather than retrying, because only a DNS change can fix them. Re-running the workflow without correcting DNS produces the same result.
 
 ## Prerequisites
 
 1. A [KrakenKey](https://krakenkey.io) account
 2. A verified domain in your KrakenKey dashboard
-3. An API key (starts with `kk_`) stored as a GitHub Actions secret
+3. An `_acme-challenge` CNAME delegating ACME challenges to KrakenKey — one-time, per domain, separate from the ownership TXT record. See [ACME challenge delegation](#acme-challenge-delegation)
+4. An API key (starts with `kk_`) stored as a GitHub Actions secret
 
 ## License
 

@@ -7,6 +7,7 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 ## [Unreleased]
 
 ### Documentation
+- **ACME challenge delegation**: documented the one-time `_acme-challenge` CNAME each domain needs, which Prerequisites omitted entirely. Adds a Troubleshooting entry for the `ACME challenge delegation missing` / `mismatch` errors the API now returns before creating an ACME order, the dots-to-dashes target format, the wildcard rule, and that these are permanent failures a workflow re-run will not clear. Also corrects the "Timeout during issuance" row: a missing delegation no longer presents as a timeout.
 - **Certificate Chain Files**: added a note on AIA chain repair — which clients fetch the AIA `caIssuers` URL and which never do, why `fullchain-path` is the correct deploy artifact regardless, and to verify with a non-AIA-fetching client.
 
 ### Advisory
