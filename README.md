@@ -308,13 +308,35 @@ jobs:
 | `Certificate or resource not found` | Invalid `cert-id` | Check certificate ID in KrakenKey dashboard |
 | `Rate limited` | Too many API requests | Wait and retry, or upgrade your KrakenKey plan |
 | `Invalid api-key format` | API key doesn't start with `kk_` | Use the API key from your KrakenKey dashboard |
-| Timeout during issuance | DNS-01 challenge took too long | Check domain DNS configuration; increase `poll-timeout` |
+| `ACME challenge delegation missing` | No `_acme-challenge` CNAME for one of the names on the certificate | Create the CNAME named in the error (see [ACME challenge delegation](#acme-challenge-delegation)), then request the certificate again |
+| `ACME challenge delegation mismatch` | The `_acme-challenge` CNAME points somewhere else | Change the CNAME to the target named in the error, then request the certificate again |
+| `timed out after 10m0s waiting for certificate <id>` | The action stopped waiting after `poll-timeout` (default `10m`). KrakenKey keeps working on the request. Issuance usually takes 2 to 5 minutes, and each extra name in `san` adds DNS validation time | For `issue`: raise `poll-timeout` (for example `20m`) and run again. The timed-out request still counts against your plan limits, and its private key stayed on the runner, so it can't be reused. For `renew`: don't run `renew` again (the API only renews certificates in `issued` state). Wait until the certificate shows as issued, then fetch it with `command: download` and the same `cert-id` |
+
+### ACME challenge delegation
+
+KrakenKey answers the ACME DNS-01 challenge in its own DNS zone, so every name on the certificate (`domain` and each `san` entry) needs a one-time CNAME that delegates its `_acme-challenge` name to KrakenKey. This is separate from the TXT record that verifies domain ownership. The dashboard shows the exact target for each name.
+
+| Name on the certificate | CNAME at | Target |
+|-------------------------|----------|--------|
+| `example.com` | `_acme-challenge.example.com` | `example-com.acme.krakenkey.io` |
+| `api.example.com` | `_acme-challenge.api.example.com` | `api-example-com.acme.krakenkey.io` |
+| `*.example.com` | `_acme-challenge.example.com` | `example-com.acme.krakenkey.io` |
+
+The target is the name with dots replaced by dashes, under `acme.krakenkey.io`. A wildcard uses the same record as its base name. CNAME chains are followed, so you can delegate through an intermediate name.
+
+KrakenKey checks these records before it asks Let's Encrypt for a certificate. A missing or wrong record fails the step within the first poll or two instead of running until `poll-timeout`, and KrakenKey does not retry it, because only a DNS change can fix it. After fixing DNS:
+
+- `issue`: run the workflow again. If you only just created the record, allow a few minutes for DNS to update.
+- `renew`: the certificate is now in `failed` state, and `renew` only accepts `issued` certificates, so running `renew` again won't help. Retry it from the dashboard or with `krakenkey cert retry <id>`, then fetch it with `command: download`.
+
+To check the records before running a workflow, use `krakenkey domain check example.com '*.example.com'` (CLI v0.5.0 or later) or `dig CNAME _acme-challenge.example.com +short`.
 
 ## Prerequisites
 
 1. A [KrakenKey](https://krakenkey.io) account
 2. A verified domain in your KrakenKey dashboard
-3. An API key (starts with `kk_`) stored as a GitHub Actions secret
+3. An `_acme-challenge` CNAME for each name on the certificate, delegating ACME challenges to KrakenKey. See [ACME challenge delegation](#acme-challenge-delegation)
+4. An API key (starts with `kk_`) stored as a GitHub Actions secret
 
 ## License
 

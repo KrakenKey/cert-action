@@ -9,6 +9,8 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 ### Documentation
 - **Certificate Chain Files**: added a note on AIA chain repair: why a leaf-only deploy can pass a browser check and still fail in `curl`, Go or Java clients, and how to check the served chain with `openssl s_client`.
 - **Usage Examples**: the basic deploy example now copies `fullchain-path` instead of the leaf-only `cert-path`, matching the guidance in Certificate Chain Files.
+- **ACME challenge delegation**: Prerequisites now list the `_acme-challenge` CNAME each name on the certificate needs, and a new section covers the target format, wildcards, and what to do after a `delegation missing` or `delegation mismatch` failure (for `renew`, retry the failed certificate instead of running `renew` again).
+- **Troubleshooting**: the timeout row now quotes the actual CLI message and explains that KrakenKey keeps working after `poll-timeout`. For `renew`, fetch the result with `command: download` instead of running `renew` again; for `issue`, raise `poll-timeout`.
 
 ### Advisory
 - **SC104 (AIA relaxed to SHOULD)**: CA/B Forum ballot passed 2026-09-03 and takes effect once its IPR review ends and it is published in the Baseline Requirements. The `authorityInformationAccess` extension goes from MUST to SHOULD in TLS subscriber certificates, so a compliant leaf may carry no `caIssuers` URL for clients to fetch a missing intermediate from. `chain-path` and `fullchain-path` are unaffected (they come from the chain KrakenKey stores, not from an AIA fetch). Workflows that deploy `cert-path` alone should switch to `fullchain-path`.
