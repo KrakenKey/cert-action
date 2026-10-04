@@ -100,7 +100,15 @@ Most web servers (nginx, Apache, HAProxy, Caddy) expect the **full chain**. Use 
 
 The `cert-path`, `chain-path`, and `fullchain-path` outputs give absolute paths suitable for use in downstream `scp`, `kubectl`, or secrets manager upload steps.
 
-> **Deploy the full chain — do not rely on AIA chain repair.** If a server presents only the leaf, some clients reconstruct the chain by fetching the issuing intermediate from the certificate's `authorityInformationAccess` (AIA) `caIssuers` URL (Windows Schannel, macOS Security.framework, Chrome's built-in verifier) and some never do (OpenSSL, Go, Firefox, Java PKIX by default). That split is why a deployment can pass a browser spot-check and fail in `curl` or in a Go service with `unable to get local issuer certificate`. CA/Browser Forum ballot SC104 (passed 2026-09-03) relaxed AIA from MUST to SHOULD in subscriber certificates, so leaves may eventually carry no `caIssuers` URL and chain repair becomes unavailable everywhere. Using `fullchain-path` is correct today and stays correct; if you add a post-deploy verification step, use a client that does not fetch AIA.
+### Why not the leaf alone?
+
+If a server sends only the leaf, some clients fill in the missing intermediate themselves: Windows and macOS fetch it from the URL in the certificate's Authority Information Access (AIA) extension, and Firefox ships a preloaded set of intermediates. Many others do not, including OpenSSL and tools built on it such as `curl` on Linux, Go on Linux, and Java with default settings. That is why a leaf-only deploy can look fine in a browser and still fail with `unable to get local issuer certificate` (OpenSSL) or `x509: certificate signed by unknown authority` (Go). CA/Browser Forum ballot SC104 (passed 2026-09-03) makes the AIA extension optional in subscriber certificates, so that fallback will get less reliable over time.
+
+Deploying `fullchain-path` avoids the problem. To check what a server actually sends, use a client that does not repair chains:
+
+```bash
+openssl s_client -connect api.example.com:443 -servername api.example.com -verify_return_error </dev/null
+```
 
 ## Usage Examples
 
@@ -129,7 +137,7 @@ jobs:
 
       - name: Deploy with certificate
         run: |
-          scp ${{ steps.cert.outputs.cert-path }} server:/etc/ssl/certs/
+          scp ${{ steps.cert.outputs.fullchain-path }} server:/etc/ssl/certs/
           scp ${{ steps.cert.outputs.key-path }} server:/etc/ssl/private/
           ssh server 'systemctl reload nginx'
 ```
