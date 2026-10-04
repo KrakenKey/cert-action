@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # ── 1. Mask secrets ──────────────────────────────────────────────
-echo "::add-mask::${INPUT_API_KEY}"
+mask_secrets() {
+  echo "::add-mask::${INPUT_API_KEY}"
+}
 
 # ── 2. Validate inputs ──────────────────────────────────────────
 validate_inputs() {
@@ -70,6 +72,24 @@ download_cli() {
 }
 
 # ── 4. Execute command ───────────────────────────────────────────
+# Split the comma-separated san input into one "--san <name>" pair per line.
+# The CLI takes repeated --san flags and does not split values itself, so
+# passing the raw input would request a single SAN like "a.com,b.com".
+# Whitespace around each name is trimmed, empty entries are dropped, and
+# newlines are accepted as separators too.
+san_args() {
+  local raw="${1//$'\n'/,}" entry
+  local -a entries=()
+  IFS=',' read -r -a entries <<< "${raw}"
+  for entry in "${entries[@]}"; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"
+    entry="${entry%"${entry##*[![:space:]]}"}"
+    if [[ -n "${entry}" ]]; then
+      printf '%s\n' --san "${entry}"
+    fi
+  done
+}
+
 execute_issue() {
   local args=(
     --api-url "${INPUT_API_URL}"
@@ -88,7 +108,9 @@ execute_issue() {
   )
   [[ "${INPUT_AUTO_RENEW}" == "true" ]] && args+=(--auto-renew)
   [[ "${INPUT_WAIT}" == "true" ]] && args+=(--wait)
-  [[ -n "${INPUT_SAN}" ]] && args+=(--san "${INPUT_SAN}")
+  local -a sans=()
+  mapfile -t sans < <(san_args "${INPUT_SAN:-}")
+  args+=("${sans[@]}")
   [[ -n "${INPUT_SUBJECT_ORG}" ]] && args+=(--org "${INPUT_SUBJECT_ORG}")
   [[ -n "${INPUT_SUBJECT_OU}" ]] && args+=(--ou "${INPUT_SUBJECT_OU}")
   [[ -n "${INPUT_SUBJECT_COUNTRY}" ]] && args+=(--country "${INPUT_SUBJECT_COUNTRY}")
@@ -96,20 +118,37 @@ execute_issue() {
   KK_API_KEY="${INPUT_API_KEY}" krakenkey "${args[@]}"
 }
 
+# Prints "false" when the CLI reported a skipped renewal (--if-due and the
+# certificate is outside the renewal window), otherwise "true". The CLI's JSON
+# output can hold several documents (e.g. a warning before the result).
+renew_outcome() {
+  if echo "$1" | jq -se 'any(.[]; type == "object" and .skipped == true)' >/dev/null 2>&1; then
+    echo "false"
+  else
+    echo "true"
+  fi
+}
+
 execute_renew() {
-  local result rc=0 wait_args=()
-  [[ "${INPUT_WAIT}" == "true" ]] && wait_args+=(--wait)
+  local result rc=0 renew_args=() workdir
+  [[ "${INPUT_WAIT}" == "true" ]] && renew_args+=(--wait)
+  [[ "${INPUT_IF_DUE:-false}" == "true" ]] && renew_args+=(--if-due)
+  # CLI v0.7.0+ saves ./<cn>.crt and friends after renew --wait. The action
+  # downloads to its own output paths below, so run renew in a scratch
+  # directory to keep those copies out of the workspace.
+  workdir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/krakenkey-renew.XXXXXX")
   # Capture output but never let a CLI failure abort before we can print it.
   # Under set -e, a plain result=$(...) exits on failure and the CLI's error
   # message (stdout in --output json mode) is lost with it.
-  result=$(KK_API_KEY="${INPUT_API_KEY}" krakenkey \
+  result=$(cd "${workdir}" && KK_API_KEY="${INPUT_API_KEY}" krakenkey \
     --api-url "${INPUT_API_URL}" \
     --output json \
     --no-color \
     cert renew "${INPUT_CERT_ID}" \
-    "${wait_args[@]}" \
+    "${renew_args[@]}" \
     --poll-interval "${INPUT_POLL_INTERVAL}" \
     --poll-timeout "${INPUT_POLL_TIMEOUT}") || rc=$?
+  rm -rf "${workdir}"
   echo "${result}"
   if [[ "${rc}" -ne 0 ]]; then
     echo "::error::krakenkey cert renew exited with code ${rc}"
@@ -177,13 +216,19 @@ set_outputs() {
   local result="$1"
   local cert_id status
 
-  cert_id=$(echo "${result}" | jq -r '.id // empty')
-  status=$(echo "${result}" | jq -r '.status // empty')
+  # Take the last JSON document that carries the field; the CLI may print a
+  # warning document first.
+  cert_id=$(echo "${result}" | jq -rs 'map(select(type == "object" and has("id"))) | last | .id // empty' 2>/dev/null || true)
+  status=$(echo "${result}" | jq -rs 'map(select(type == "object" and has("status"))) | last | .status // empty' 2>/dev/null || true)
 
   {
     echo "cert-id=${cert_id}"
     echo "status=${status}"
   } >> "${GITHUB_OUTPUT}"
+
+  if [[ "${INPUT_COMMAND}" == "renew" ]]; then
+    echo "renewed=$(renew_outcome "${result}")" >> "${GITHUB_OUTPUT}"
+  fi
 
   if [[ "${status}" == "issued" ]]; then
     local details
@@ -237,6 +282,7 @@ handle_error() {
 
 # ── Main ─────────────────────────────────────────────────────────
 main() {
+  mask_secrets
   validate_inputs
   download_cli
 
@@ -280,4 +326,7 @@ main() {
   fi
 }
 
-main "$@"
+# Only run when executed directly, so tests can source this file.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
