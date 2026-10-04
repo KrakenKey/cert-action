@@ -100,7 +100,15 @@ Most web servers (nginx, Apache, HAProxy, Caddy) expect the **full chain**. Use 
 
 The `cert-path`, `chain-path`, and `fullchain-path` outputs give absolute paths suitable for use in downstream `scp`, `kubectl`, or secrets manager upload steps.
 
-> **Deploy the full chain — do not rely on AIA chain repair.** If a server presents only the leaf, some clients reconstruct the chain by fetching the issuing intermediate from the certificate's `authorityInformationAccess` (AIA) `caIssuers` URL (Windows Schannel, macOS Security.framework, Chrome's built-in verifier) and some never do (OpenSSL, Go, Firefox, Java PKIX by default). That split is why a deployment can pass a browser spot-check and fail in `curl` or in a Go service with `unable to get local issuer certificate`. CA/Browser Forum ballot SC104 (passed 2026-09-03) relaxed AIA from MUST to SHOULD in subscriber certificates, so leaves may eventually carry no `caIssuers` URL and chain repair becomes unavailable everywhere. Using `fullchain-path` is correct today and stays correct; if you add a post-deploy verification step, use a client that does not fetch AIA.
+### Why not the leaf alone?
+
+If a server sends only the leaf, some clients fill in the missing intermediate themselves: Windows and macOS fetch it from the URL in the certificate's Authority Information Access (AIA) extension, and Firefox ships a preloaded set of intermediates. Many others do not, including OpenSSL and tools built on it such as `curl` on Linux, Go on Linux, and Java with default settings. That is why a leaf-only deploy can look fine in a browser and still fail with `unable to get local issuer certificate` (OpenSSL) or `x509: certificate signed by unknown authority` (Go). CA/Browser Forum ballot SC104 (passed 2026-09-03) makes the AIA extension optional in subscriber certificates, so that fallback will get less reliable over time.
+
+Deploying `fullchain-path` avoids the problem. To check what a server actually sends, use a client that does not repair chains:
+
+```bash
+openssl s_client -connect api.example.com:443 -servername api.example.com -verify_return_error </dev/null
+```
 
 ## Usage Examples
 
@@ -129,7 +137,7 @@ jobs:
 
       - name: Deploy with certificate
         run: |
-          scp ${{ steps.cert.outputs.cert-path }} server:/etc/ssl/certs/
+          scp ${{ steps.cert.outputs.fullchain-path }} server:/etc/ssl/certs/
           scp ${{ steps.cert.outputs.key-path }} server:/etc/ssl/private/
           ssh server 'systemctl reload nginx'
 ```
@@ -300,30 +308,13 @@ jobs:
 | `Certificate or resource not found` | Invalid `cert-id` | Check certificate ID in KrakenKey dashboard |
 | `Rate limited` | Too many API requests | Wait and retry, or upgrade your KrakenKey plan |
 | `Invalid api-key format` | API key doesn't start with `kk_` | Use the API key from your KrakenKey dashboard |
-| `ACME challenge delegation missing` | No `_acme-challenge` CNAME for the domain | Create `_acme-challenge.<domain>` → `<domain-with-dashes>.acme.krakenkey.io`, then re-run. See [ACME challenge delegation](#acme-challenge-delegation) |
-| `ACME challenge delegation mismatch` | The `_acme-challenge` CNAME points somewhere else | Correct the CNAME target, then re-run |
-| Timeout during issuance | DNS-01 challenge took too long | Check domain DNS configuration; increase `poll-timeout`. A *missing* delegation no longer presents as a timeout — it fails fast with the error above |
-
-### ACME challenge delegation
-
-KrakenKey answers the ACME DNS-01 challenge in its own zone, so each domain needs a one-time CNAME delegating the challenge name. This is separate from the TXT record used for ownership verification, and issuance now checks it **before** creating an ACME order — so a missing or wrong record fails the step in seconds rather than timing out.
-
-| Domain | CNAME at | Target |
-|--------|----------|--------|
-| `example.com` | `_acme-challenge.example.com` | `example-com.acme.krakenkey.io` |
-| `api.example.com` | `_acme-challenge.api.example.com` | `api-example-com.acme.krakenkey.io` |
-| `*.example.com` | `_acme-challenge.example.com` | `example-com.acme.krakenkey.io` |
-
-The target is the domain with dots replaced by dashes, under the KrakenKey auth zone. A wildcard shares the base domain's record. CNAME chains are followed, so delegating through an intermediate name works.
-
-These are permanent failures: the job fails on the first attempt rather than retrying, because only a DNS change can fix them. Re-running the workflow without correcting DNS produces the same result.
+| Timeout during issuance | DNS-01 challenge took too long | Check domain DNS configuration; increase `poll-timeout` |
 
 ## Prerequisites
 
 1. A [KrakenKey](https://krakenkey.io) account
 2. A verified domain in your KrakenKey dashboard
-3. An `_acme-challenge` CNAME delegating ACME challenges to KrakenKey — one-time, per domain, separate from the ownership TXT record. See [ACME challenge delegation](#acme-challenge-delegation)
-4. An API key (starts with `kk_`) stored as a GitHub Actions secret
+3. An API key (starts with `kk_`) stored as a GitHub Actions secret
 
 ## License
 
