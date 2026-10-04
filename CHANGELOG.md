@@ -6,6 +6,10 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+---
+
+## [v1.3.0] — 2026-10-04
+
 ### Added
 - `if-due` input for `renew`: renews only when the certificate is inside the plan's renewal window, so a daily schedule doesn't issue a new certificate on every run. Needs krakenkey-cli v0.7.0 or later. The new `renewed` output is `false` when nothing was renewed. The scheduled renewal example now runs daily with `if-due` and deploys only when `renewed` is `true`.
 - Tests for the `renew` command with a fake CLI (`tests/renew_test.sh`) and for SAN input splitting (`tests/san_args_test.sh`), run in the Test workflow.
