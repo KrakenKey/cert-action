@@ -33,6 +33,7 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 | `auto-renew` | Enable server-side auto-renewal | No | `true` |
 | `cert-id` | Certificate ID for `renew` or `download` commands | `renew`/`download` | — |
 | `wait` | Wait for issuance/renewal to complete | No | `true` |
+| `if-due` | For `renew`: only renew when the certificate is inside your plan's renewal window; otherwise leave it and set `renewed` to `false`. Use this for scheduled workflows. Needs CLI v0.7.0 or later | No | `false` |
 | `poll-interval` | Poll interval when waiting (Go duration, e.g., `15s`) | No | `15s` |
 | `poll-timeout` | Maximum time to wait (Go duration, e.g., `10m`) | No | `10m` |
 | `cert-path` | Path to save the leaf certificate PEM | No | `./cert.pem` |
@@ -48,6 +49,7 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
 |--------|-------------|
 | `cert-id` | Certificate ID |
 | `status` | Certificate status (`pending`, `issuing`, `issued`, `failed`) |
+| `renewed` | For `renew`: `true` if a renewal ran, `false` if `if-due` found the certificate was not due yet |
 | `domain` | Primary domain (CN) |
 | `sans` | Subject Alternative Names (comma-separated) |
 | `issuer` | Certificate issuer (e.g., `CN=R11,O=Let's Encrypt,C=US`) |
@@ -73,6 +75,8 @@ Generates a CSR locally, submits it to the KrakenKey API, waits for issuance (~4
 ### `renew`
 
 Triggers renewal of an existing certificate by ID, waits for completion, and downloads the new certificate and chain files.
+
+Without `if-due`, every run issues a new certificate and counts against your monthly limit. For scheduled workflows set `if-due: true`: the certificate is renewed only once it is inside your plan's renewal window (5 days on Free, 30 days on paid plans). On other runs nothing is renewed, the current certificate is still downloaded to the output paths, and the `renewed` output is `false`, so later steps can skip deploying.
 
 **Required inputs:** `api-key`, `cert-id`
 
@@ -207,7 +211,7 @@ jobs:
 name: Certificate Renewal
 on:
   schedule:
-    - cron: '0 6 * * 1'  # Every Monday at 6 AM
+    - cron: '0 6 * * *'  # Daily at 6 AM; if-due renews only when due
 
 jobs:
   renew:
@@ -225,9 +229,10 @@ jobs:
           api-key: ${{ secrets.KRAKENKEY_API_KEY }}
           command: renew
           cert-id: ${{ matrix.cert.id }}
+          if-due: true
 
       - name: Deploy renewed cert
-        if: steps.cert.outputs.status == 'issued'
+        if: steps.cert.outputs.renewed == 'true'
         run: |
           echo "Renewed ${{ matrix.cert.name }} — expires ${{ steps.cert.outputs.expires }}"
 ```
