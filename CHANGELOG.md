@@ -6,6 +6,12 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+- `san` input is now split on commas before it reaches the CLI. Each name is trimmed, empty entries are dropped, and every name is passed as its own `--san` flag. Previously the whole string went through as one SAN (for example `www.example.com,api.example.com`), so multi-domain certificates did not get the names the README describes.
+
+### Added
+- Unit tests for SAN input splitting (`tests/san_args_test.sh`), run in the Test workflow.
+
 ---
 
 ## [v1.2.0] — 2026-09-04
