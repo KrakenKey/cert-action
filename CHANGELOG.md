@@ -6,11 +6,16 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+- `if-due` input for `renew`: renews only when the certificate is inside the plan's renewal window, so a daily schedule doesn't issue a new certificate on every run. Needs krakenkey-cli v0.7.0 or later. The new `renewed` output is `false` when nothing was renewed. The scheduled renewal example now runs daily with `if-due` and deploys only when `renewed` is `true`.
+- Tests for the `renew` command with a fake CLI (`tests/renew_test.sh`) and for SAN input splitting (`tests/san_args_test.sh`), run in the Test workflow.
+
+### Changed
+- `renew` runs the CLI in a scratch directory. krakenkey-cli v0.7.0 saves `./<cn>.crt`, `.chain.crt` and `.fullchain.crt` after `renew --wait`; the action downloads to its own output paths, so those copies no longer end up in the workspace.
+- `cert-id` and `status` outputs read the last JSON document that has the field, so a warning printed by the CLI before its result no longer breaks them.
+
 ### Fixed
 - `san` input is now split on commas before it reaches the CLI. Each name is trimmed, empty entries are dropped, and every name is passed as its own `--san` flag. Previously the whole string went through as one SAN (for example `www.example.com,api.example.com`), so multi-domain certificates did not get the names the README describes.
-
-### Added
-- Unit tests for SAN input splitting (`tests/san_args_test.sh`), run in the Test workflow.
 
 ---
 

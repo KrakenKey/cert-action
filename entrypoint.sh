@@ -118,20 +118,37 @@ execute_issue() {
   KK_API_KEY="${INPUT_API_KEY}" krakenkey "${args[@]}"
 }
 
+# Prints "false" when the CLI reported a skipped renewal (--if-due and the
+# certificate is outside the renewal window), otherwise "true". The CLI's JSON
+# output can hold several documents (e.g. a warning before the result).
+renew_outcome() {
+  if echo "$1" | jq -se 'any(.[]; type == "object" and .skipped == true)' >/dev/null 2>&1; then
+    echo "false"
+  else
+    echo "true"
+  fi
+}
+
 execute_renew() {
-  local result rc=0 wait_args=()
-  [[ "${INPUT_WAIT}" == "true" ]] && wait_args+=(--wait)
+  local result rc=0 renew_args=() workdir
+  [[ "${INPUT_WAIT}" == "true" ]] && renew_args+=(--wait)
+  [[ "${INPUT_IF_DUE:-false}" == "true" ]] && renew_args+=(--if-due)
+  # CLI v0.7.0+ saves ./<cn>.crt and friends after renew --wait. The action
+  # downloads to its own output paths below, so run renew in a scratch
+  # directory to keep those copies out of the workspace.
+  workdir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/krakenkey-renew.XXXXXX")
   # Capture output but never let a CLI failure abort before we can print it.
   # Under set -e, a plain result=$(...) exits on failure and the CLI's error
   # message (stdout in --output json mode) is lost with it.
-  result=$(KK_API_KEY="${INPUT_API_KEY}" krakenkey \
+  result=$(cd "${workdir}" && KK_API_KEY="${INPUT_API_KEY}" krakenkey \
     --api-url "${INPUT_API_URL}" \
     --output json \
     --no-color \
     cert renew "${INPUT_CERT_ID}" \
-    "${wait_args[@]}" \
+    "${renew_args[@]}" \
     --poll-interval "${INPUT_POLL_INTERVAL}" \
     --poll-timeout "${INPUT_POLL_TIMEOUT}") || rc=$?
+  rm -rf "${workdir}"
   echo "${result}"
   if [[ "${rc}" -ne 0 ]]; then
     echo "::error::krakenkey cert renew exited with code ${rc}"
@@ -199,13 +216,19 @@ set_outputs() {
   local result="$1"
   local cert_id status
 
-  cert_id=$(echo "${result}" | jq -r '.id // empty')
-  status=$(echo "${result}" | jq -r '.status // empty')
+  # Take the last JSON document that carries the field; the CLI may print a
+  # warning document first.
+  cert_id=$(echo "${result}" | jq -rs 'map(select(type == "object" and has("id"))) | last | .id // empty' 2>/dev/null || true)
+  status=$(echo "${result}" | jq -rs 'map(select(type == "object" and has("status"))) | last | .status // empty' 2>/dev/null || true)
 
   {
     echo "cert-id=${cert_id}"
     echo "status=${status}"
   } >> "${GITHUB_OUTPUT}"
+
+  if [[ "${INPUT_COMMAND}" == "renew" ]]; then
+    echo "renewed=$(renew_outcome "${result}")" >> "${GITHUB_OUTPUT}"
+  fi
 
   if [[ "${status}" == "issued" ]]; then
     local details
