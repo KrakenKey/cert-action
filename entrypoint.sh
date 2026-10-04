@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # ── 1. Mask secrets ──────────────────────────────────────────────
-echo "::add-mask::${INPUT_API_KEY}"
+mask_secrets() {
+  echo "::add-mask::${INPUT_API_KEY}"
+}
 
 # ── 2. Validate inputs ──────────────────────────────────────────
 validate_inputs() {
@@ -70,6 +72,24 @@ download_cli() {
 }
 
 # ── 4. Execute command ───────────────────────────────────────────
+# Split the comma-separated san input into one "--san <name>" pair per line.
+# The CLI takes repeated --san flags and does not split values itself, so
+# passing the raw input would request a single SAN like "a.com,b.com".
+# Whitespace around each name is trimmed, empty entries are dropped, and
+# newlines are accepted as separators too.
+san_args() {
+  local raw="${1//$'\n'/,}" entry
+  local -a entries=()
+  IFS=',' read -r -a entries <<< "${raw}"
+  for entry in "${entries[@]}"; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"
+    entry="${entry%"${entry##*[![:space:]]}"}"
+    if [[ -n "${entry}" ]]; then
+      printf '%s\n' --san "${entry}"
+    fi
+  done
+}
+
 execute_issue() {
   local args=(
     --api-url "${INPUT_API_URL}"
@@ -88,7 +108,9 @@ execute_issue() {
   )
   [[ "${INPUT_AUTO_RENEW}" == "true" ]] && args+=(--auto-renew)
   [[ "${INPUT_WAIT}" == "true" ]] && args+=(--wait)
-  [[ -n "${INPUT_SAN}" ]] && args+=(--san "${INPUT_SAN}")
+  local -a sans=()
+  mapfile -t sans < <(san_args "${INPUT_SAN:-}")
+  args+=("${sans[@]}")
   [[ -n "${INPUT_SUBJECT_ORG}" ]] && args+=(--org "${INPUT_SUBJECT_ORG}")
   [[ -n "${INPUT_SUBJECT_OU}" ]] && args+=(--ou "${INPUT_SUBJECT_OU}")
   [[ -n "${INPUT_SUBJECT_COUNTRY}" ]] && args+=(--country "${INPUT_SUBJECT_COUNTRY}")
@@ -237,6 +259,7 @@ handle_error() {
 
 # ── Main ─────────────────────────────────────────────────────────
 main() {
+  mask_secrets
   validate_inputs
   download_cli
 
@@ -280,4 +303,7 @@ main() {
   fi
 }
 
-main "$@"
+# Only run when executed directly, so tests can source this file.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
