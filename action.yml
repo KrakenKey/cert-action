@@ -55,6 +55,10 @@ inputs:
     description: 'Wait for issuance/renewal to complete'
     required: false
     default: 'true'
+  if-due:
+    description: 'For renew: only renew when the certificate is inside the plan renewal window, otherwise leave it and set the renewed output to false. Safe for scheduled workflows. Needs krakenkey-cli v0.7.0 or later'
+    required: false
+    default: 'false'
   poll-interval:
     description: 'Poll interval when waiting (Go duration, e.g., 15s)'
     required: false
@@ -97,6 +101,9 @@ outputs:
   status:
     description: 'Certificate status (pending, issuing, issued, failed)'
     value: ${{ steps.run.outputs.status }}
+  renewed:
+    description: 'For renew: "true" if a renewal ran, "false" if if-due found the certificate was not due yet'
+    value: ${{ steps.run.outputs.renewed }}
   domain:
     description: 'Primary domain (CN)'
     value: ${{ steps.run.outputs.domain }}
@@ -156,6 +163,7 @@ runs:
         INPUT_AUTO_RENEW: ${{ inputs.auto-renew }}
         INPUT_CERT_ID: ${{ inputs.cert-id }}
         INPUT_WAIT: ${{ inputs.wait }}
+        INPUT_IF_DUE: ${{ inputs.if-due }}
         INPUT_POLL_INTERVAL: ${{ inputs.poll-interval }}
         INPUT_POLL_TIMEOUT: ${{ inputs.poll-timeout }}
         INPUT_CERT_PATH: ${{ inputs.cert-path }}
