@@ -6,6 +6,17 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Documentation
+- **Certificate Chain Files**: added a note on AIA chain repair: why a leaf-only deploy can pass a browser check and still fail in `curl`, Go or Java clients, and how to check the served chain with `openssl s_client`.
+- **Usage Examples**: the basic deploy example now copies `fullchain-path` instead of the leaf-only `cert-path`, matching the guidance in Certificate Chain Files.
+- **ACME challenge delegation**: Prerequisites now list the `_acme-challenge` CNAME each name on the certificate needs, and a new section covers the target format, wildcards, and what to do after a `delegation missing` or `delegation mismatch` failure (for `renew`, retry the failed certificate instead of running `renew` again).
+- **Troubleshooting**: the timeout row now quotes the actual CLI message and explains that KrakenKey keeps working after `poll-timeout`. For `renew`, fetch the result with `command: download` instead of running `renew` again; for `issue`, raise `poll-timeout`.
+
+### Advisory
+- **SC104 (AIA relaxed to SHOULD)**: CA/B Forum ballot passed 2026-09-03 and takes effect once its IPR review ends and it is published in the Baseline Requirements. The `authorityInformationAccess` extension goes from MUST to SHOULD in TLS subscriber certificates, so a compliant leaf may carry no `caIssuers` URL for clients to fetch a missing intermediate from. `chain-path` and `fullchain-path` are unaffected (they come from the chain KrakenKey stores, not from an AIA fetch). Workflows that deploy `cert-path` alone should switch to `fullchain-path`.
+- **SC100 (DNSSEC validation consolidation)**: CA/B Forum ballot passed 2026-08-06, published in Baseline Requirements v2.3.0 (2026-09-07). Consolidates the DNSSEC validation rules into BR section 4.2.2.2 and clarifies that mandatory validation applies to the CA's primary network perspective only. No change in CA behavior and nothing to change in workflows. If a `renew` or `issue` step fails on a DNSSEC-signed zone, a broken DS/DNSKEY rollover that makes the zone return `SERVFAIL` blocks issuance.
+- **HARICA mass revocations** (July 2026): HARICA found 66,105 TLS certificates issued with a `clientAuth` EKU after its own CP/CPS cutoff and revoked 63,525 of them by 2026-07-20, then had to replace another batch by 2026-07-25 over a missing OCSP URL in AIA. HARICA is not this action's issuer (KrakenKey uses Let's Encrypt), but the same thing can happen to any CA. `if-due` looks only at the expiry date, so a scheduled `renew` with `if-due: true` will not replace a certificate the CA revoked early. Adding a `workflow_dispatch` trigger that runs `renew` without `if-due` gives you a way to force a renewal.
+
 ---
 
 ## [v1.3.0] — 2026-10-04
