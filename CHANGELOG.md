@@ -6,6 +6,9 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+- GitHub OIDC authentication (#32). With no `api-key`, the action requests a GitHub OIDC token (the job needs `permissions: id-token: write`) and exchanges it with the KrakenKey API for a key that lasts 15 minutes and carries the repository's trust policy limits. New inputs `oidc-audience` (default `https://api.krakenkey.io`) and `trust-id`. `api-key` is no longer required. Errors say what to fix: a missing permission, no matching trust policy, a wrong audience, or several matching policies. Needs the KrakenKey API with GitHub OIDC support (KrakenKey/app).
+
 ### Documentation
 - **Certificate Chain Files**: added a note on AIA chain repair: why a leaf-only deploy can pass a browser check and still fail in `curl`, Go or Java clients, and how to check the served chain with `openssl s_client`.
 - **Usage Examples**: the basic deploy example now copies `fullchain-path` instead of the leaf-only `cert-path`, matching the guidance in Certificate Chain Files.
