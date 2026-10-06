@@ -17,11 +17,37 @@ Issue, renew, or download TLS certificates from [KrakenKey](https://krakenkey.io
     domain: api.example.com
 ```
 
+### Without a stored API key (GitHub OIDC)
+
+Leave out `api-key` and let the job request a GitHub OIDC token instead. The action exchanges it for a KrakenKey key that lasts 15 minutes, so there is no long-lived secret to store or rotate.
+
+1. In the KrakenKey dashboard, under **API Keys → GitHub Actions**, add a trust policy for the repository (`owner/name`). Optionally limit it to branches or tags (`refs/heads/main`, `refs/tags/v*`), a GitHub environment, scopes (for example **Certificate renewal**), and specific domains or certificates.
+2. Give the job permission to request the token:
+
+```yaml
+jobs:
+  cert:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: krakenkey/cert-action@v1
+        with:
+          command: renew
+          cert-id: '42'
+          if-due: 'true'
+```
+
+The repository's numeric id is pinned the first time a token is exchanged, so a repository deleted and re-created under the same name is refused. Pull requests from forks never receive an OIDC token. If you trust a repository from more than one KrakenKey account, set `trust-id` to the policy's id.
+
 ## Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `api-key` | KrakenKey API key (starts with `kk_`). Store as `KRAKENKEY_API_KEY` in repository secrets. | Yes | — |
+| `api-key` | KrakenKey API key (starts with `kk_`). Store as `KRAKENKEY_API_KEY` in repository secrets. Leave empty to use GitHub OIDC. | No | `""` |
+| `oidc-audience` | Audience for the GitHub OIDC token when `api-key` is empty. Must match the KrakenKey API | No | `https://api.krakenkey.io` |
+| `trust-id` | Trust policy id, only needed when several KrakenKey trust policies match this repository | No | `""` |
 | `api-url` | KrakenKey API base URL | No | `https://api.krakenkey.io` |
 | `command` | Action to perform: `issue`, `renew`, or `download` | No | `issue` |
 | `domain` | Primary domain (CN) for the certificate | `issue` only | — |
@@ -292,7 +318,8 @@ jobs:
 
 ## Security
 
-- **API key masking** — The API key is masked with `::add-mask::` as the very first operation, ensuring it is redacted from all log output.
+- **API key masking** — The API key is masked with `::add-mask::` as the very first operation, ensuring it is redacted from all log output. With GitHub OIDC, the OIDC token and the short-lived key are masked as soon as they are received.
+- **GitHub OIDC** — With no `api-key`, nothing long-lived is stored: each run gets a key that expires after 15 minutes and is limited to what the repository's trust policy allows.
 - **API key not in process list** — The CLI is invoked with the `KK_API_KEY` environment variable instead of a `--api-key` flag, so the key does not appear in `ps` output.
 - **Private key permissions** — Private key files are written with `chmod 0600`. The action does NOT upload artifacts — deploying or storing the private key securely is the user's responsibility.
 - **Checksum verification** — The CLI binary is verified against goreleaser SHA-256 checksums before execution, protecting against CDN/mirror compromise.

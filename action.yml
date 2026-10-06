@@ -7,8 +7,17 @@ branding:
 
 inputs:
   api-key:
-    description: 'KrakenKey API key (starts with kk_). Store as KRAKENKEY_API_KEY in repository secrets.'
-    required: true
+    description: 'KrakenKey API key (starts with kk_), stored as a repository secret. Leave empty to authenticate with GitHub OIDC instead (needs permissions: id-token: write and a trust policy for this repository in KrakenKey).'
+    required: false
+    default: ''
+  oidc-audience:
+    description: 'Audience for the GitHub OIDC token when api-key is empty. Must match the KrakenKey API (KK_GITHUB_OIDC_AUDIENCE)'
+    required: false
+    default: 'https://api.krakenkey.io'
+  trust-id:
+    description: 'KrakenKey trust policy id, only needed when more than one policy trusts this repository'
+    required: false
+    default: ''
   api-url:
     description: 'KrakenKey API base URL'
     required: false
@@ -152,6 +161,8 @@ runs:
       run: ${{ github.action_path }}/entrypoint.sh
       env:
         INPUT_API_KEY: ${{ inputs.api-key }}
+        INPUT_OIDC_AUDIENCE: ${{ inputs.oidc-audience }}
+        INPUT_TRUST_ID: ${{ inputs.trust-id }}
         INPUT_API_URL: ${{ inputs.api-url }}
         INPUT_COMMAND: ${{ inputs.command }}
         INPUT_DOMAIN: ${{ inputs.domain }}

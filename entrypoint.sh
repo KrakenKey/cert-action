@@ -3,16 +3,14 @@ set -euo pipefail
 
 # ── 1. Mask secrets ──────────────────────────────────────────────
 mask_secrets() {
-  echo "::add-mask::${INPUT_API_KEY}"
+  if [[ -n "${INPUT_API_KEY:-}" ]]; then
+    echo "::add-mask::${INPUT_API_KEY}"
+  fi
 }
 
 # ── 2. Validate inputs ──────────────────────────────────────────
 validate_inputs() {
-  if [[ -z "${INPUT_API_KEY}" ]]; then
-    echo "::error::Missing required input: api-key"
-    exit 1
-  fi
-  if [[ ! "${INPUT_API_KEY}" =~ ^kk_ ]]; then
+  if [[ -n "${INPUT_API_KEY:-}" && ! "${INPUT_API_KEY}" =~ ^kk_ ]]; then
     echo "::error::Invalid api-key format — must start with 'kk_'"
     exit 1
   fi
@@ -35,6 +33,61 @@ validate_inputs() {
       exit 1
       ;;
   esac
+}
+
+# ── 2b. GitHub OIDC ──────────────────────────────────────────────
+# Without an api-key, exchange the job's GitHub OIDC token for a KrakenKey
+# key that lasts 15 minutes and carries the trust policy's limits.
+resolve_api_key() {
+  if [[ -n "${INPUT_API_KEY:-}" ]]; then
+    return 0
+  fi
+  if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+    echo "::error::No api-key given and GitHub OIDC is not available. Either pass api-key, or add 'permissions: id-token: write' to the job and create a trust policy for this repository in the KrakenKey dashboard."
+    exit 1
+  fi
+
+  local audience token body response status message
+  audience=$(jq -rn --arg a "${INPUT_OIDC_AUDIENCE:-https://api.krakenkey.io}" '$a | @uri')
+  if ! token=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+      "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}" | jq -r '.value // empty'); then
+    token=""
+  fi
+  if [[ -z "${token}" ]]; then
+    echo "::error::Could not get a GitHub OIDC token for this job."
+    exit 1
+  fi
+  echo "::add-mask::${token}"
+
+  body=$(jq -cn --arg t "${token}" --arg id "${INPUT_TRUST_ID:-}" \
+    '{token: $t} + (if $id == "" then {} else {trustId: $id} end)')
+  response=$(curl -sS -w '\n%{http_code}' -X POST \
+    -H 'Content-Type: application/json' --data "${body}" \
+    "${INPUT_API_URL%/}/auth/github-oidc") || {
+    echo "::error::Could not reach ${INPUT_API_URL} to exchange the GitHub OIDC token."
+    exit 1
+  }
+  status=$(tail -n1 <<<"${response}")
+  body=$(sed '$d' <<<"${response}")
+  if [[ "${status}" != "200" ]]; then
+    message=$(jq -r '.message // empty' <<<"${body}" 2>/dev/null || true)
+    case "${status}" in
+      401) echo "::error::KrakenKey rejected the GitHub OIDC token (${message:-invalid token}). Check that oidc-audience matches the KrakenKey API." ;;
+      403) echo "::error::${message:-No KrakenKey trust policy matches this repository.} Create one in the KrakenKey dashboard, or check its branch, tag and environment conditions." ;;
+      409) echo "::error::${message:-Several trust policies match this repository.} Set the trust-id input to one of: $(jq -r '.trustIds // [] | join(", ")' <<<"${body}" 2>/dev/null)" ;;
+      *)   echo "::error::GitHub OIDC exchange failed with HTTP ${status}${message:+: ${message}}" ;;
+    esac
+    exit 1
+  fi
+
+  INPUT_API_KEY=$(jq -r '.apiKey // empty' <<<"${body}")
+  if [[ ! "${INPUT_API_KEY}" =~ ^kk_ ]]; then
+    echo "::error::GitHub OIDC exchange returned no API key."
+    exit 1
+  fi
+  echo "::add-mask::${INPUT_API_KEY}"
+  export INPUT_API_KEY
+  echo "Authenticated with GitHub OIDC (key valid until $(jq -r '.expiresAt' <<<"${body}"))." >&2
 }
 
 # ── 3. Download CLI binary ───────────────────────────────────────
@@ -271,7 +324,7 @@ handle_error() {
   local exit_code="$1"
   case "${exit_code}" in
     0) return 0 ;;
-    2) echo "::error::Authentication failed — verify KRAKENKEY_API_KEY secret is set and valid" ;;
+    2) echo "::error::Authentication failed — verify the api-key secret is set and valid, or that the GitHub OIDC trust policy grants this command's scopes" ;;
     3) echo "::error::Certificate or resource not found — check cert-id input" ;;
     4) echo "::error::Rate limited by KrakenKey API — wait and retry, or upgrade your plan" ;;
     5) echo "::error::Configuration error — check action inputs" ;;
@@ -284,6 +337,7 @@ handle_error() {
 main() {
   mask_secrets
   validate_inputs
+  resolve_api_key
   download_cli
 
   local result=""

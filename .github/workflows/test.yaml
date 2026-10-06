@@ -20,6 +20,8 @@ jobs:
         run: bash tests/san_args_test.sh
       - name: renew command
         run: bash tests/renew_test.sh
+      - name: github oidc
+        run: bash tests/oidc_test.sh
 
   action-test:
     runs-on: ubuntu-latest
