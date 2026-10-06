@@ -112,3 +112,18 @@ jobs:
           test -f ./test-cert.pem
           test -f ./test-key.pem
           openssl x509 -in ./test-cert.pem -noout -subject
+
+      # Every run issues a new certificate for ci-test.krakenkey.io. Without
+      # this the account fills up to its active certificate limit and the
+      # next runs fail. Needs the certs:revoke scope on the API key.
+      - name: Revoke test certificate
+        if: always() && steps.cert.outputs.cert-id != ''
+        env:
+          KK_API_KEY: ${{ secrets.KRAKENKEY_STAGING_API_KEY }}
+          CERT_ID: ${{ steps.cert.outputs.cert-id }}
+        run: |
+          curl -fsS -X POST "https://api-dev.krakenkey.io/certs/tls/${CERT_ID}/revoke" \
+            -H "Authorization: Bearer ${KK_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo
