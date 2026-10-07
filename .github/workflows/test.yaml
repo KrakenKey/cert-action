@@ -3,6 +3,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    # Weekly issue-and-revoke test. Wednesday 15:00 UTC, while the staging API
+    # is up (it's switched off nights and weekends).
+    - cron: '0 15 * * 3'
+  workflow_dispatch:
 
 jobs:
   shellcheck:
@@ -91,23 +96,108 @@ jobs:
             exit 1
           fi
 
+  # Every push to main: download and renew (with if-due) a long-lived test
+  # certificate on the staging API. This covers CLI install, auth, the API and
+  # the outputs without issuing anything, so it doesn't use up the account's
+  # monthly certificates. KK_CI_CERT_ID is that certificate's ID.
   integration:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # The staging API is switched off nights and weekends. Skip rather than
+      # fail, so a push at the wrong hour doesn't turn main red.
+      - name: Check the staging API is up
+        id: staging
+        run: |
+          if curl -fsS -m 20 -o /dev/null https://api-dev.krakenkey.io/health; then
+            echo "up=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Staging API is unreachable (it's off nights and weekends); skipping integration."
+            echo "up=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download test certificate
+        id: download
+        if: steps.staging.outputs.up == 'true'
+        uses: ./
+        with:
+          api-key: ${{ secrets.KRAKENKEY_STAGING_API_KEY }}
+          api-url: 'https://api-dev.krakenkey.io'
+          command: download
+          cert-id: ${{ vars.KK_CI_CERT_ID }}
+          cert-path: ./dl-cert.pem
+          chain-path: ./dl-chain.pem
+          fullchain-path: ./dl-fullchain.pem
+
+      - name: Verify download
+        if: steps.staging.outputs.up == 'true'
+        run: |
+          test "${{ steps.download.outputs.cert-id }}" = "${{ vars.KK_CI_CERT_ID }}"
+          test "${{ steps.download.outputs.status }}" = "issued"
+          test -n "${{ steps.download.outputs.expires }}"
+          openssl x509 -in ./dl-cert.pem -noout -subject
+          # The fullchain starts with the leaf and has at least one intermediate.
+          test "$(openssl x509 -in ./dl-fullchain.pem -noout -fingerprint)" = "$(openssl x509 -in ./dl-cert.pem -noout -fingerprint)"
+          test "$(grep -c 'BEGIN CERTIFICATE' ./dl-fullchain.pem)" -ge 2
+
+      # Renews only inside the plan's renewal window; otherwise it reports
+      # renewed=false. Either way it exercises the renew path end to end.
+      - name: Renew test certificate if due
+        id: renew
+        if: steps.staging.outputs.up == 'true'
+        uses: ./
+        with:
+          api-key: ${{ secrets.KRAKENKEY_STAGING_API_KEY }}
+          api-url: 'https://api-dev.krakenkey.io'
+          command: renew
+          cert-id: ${{ vars.KK_CI_CERT_ID }}
+          if-due: 'true'
+          poll-timeout: 15m
+          cert-path: ./rn-cert.pem
+
+      - name: Verify renew
+        if: steps.staging.outputs.up == 'true'
+        run: |
+          test "${{ steps.renew.outputs.status }}" = "issued"
+          case "${{ steps.renew.outputs.renewed }}" in true|false) ;; *) echo "renewed output missing"; exit 1 ;; esac
+          echo "renewed=${{ steps.renew.outputs.renewed }}"
+
+  # Weekly and on demand: issue a new certificate, check it, revoke it. Each
+  # run uses one of the staging account's monthly certificates, so it doesn't
+  # run on every push.
+  integration-issue:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Check the staging API is up
+        id: staging
+        run: |
+          if curl -fsS -m 20 -o /dev/null https://api-dev.krakenkey.io/health; then
+            echo "up=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Staging API is unreachable (it's off nights and weekends); skipping integration."
+            echo "up=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Issue test certificate
         id: cert
+        if: steps.staging.outputs.up == 'true'
         uses: ./
         with:
           api-key: ${{ secrets.KRAKENKEY_STAGING_API_KEY }}
           api-url: 'https://api-dev.krakenkey.io'
           domain: 'ci-test.krakenkey.io'
           key-type: 'ecdsa-p256'
+          auto-renew: 'false'
           cert-path: './test-cert.pem'
           key-path: './test-key.pem'
 
       - name: Verify outputs
+        if: steps.staging.outputs.up == 'true'
         run: |
           test -n "${{ steps.cert.outputs.cert-id }}"
           test "${{ steps.cert.outputs.status }}" = "issued"
@@ -115,9 +205,8 @@ jobs:
           test -f ./test-key.pem
           openssl x509 -in ./test-cert.pem -noout -subject
 
-      # Every run issues a new certificate for ci-test.krakenkey.io. Without
-      # this the account fills up to its active certificate limit and the
-      # next runs fail. Needs the certs:revoke scope on the API key.
+      # Without this the account fills up to its active certificate limit.
+      # Needs the certs:revoke scope on the API key.
       - name: Revoke test certificate
         if: always() && steps.cert.outputs.cert-id != ''
         env:
