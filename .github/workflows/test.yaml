@@ -29,6 +29,8 @@ jobs:
         run: bash tests/oidc_test.sh
       - name: download command
         run: bash tests/download_test.sh
+      - name: issue arguments
+        run: bash tests/issue_args_test.sh
 
   action-test:
     runs-on: ubuntu-latest
