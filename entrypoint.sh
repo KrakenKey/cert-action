@@ -73,8 +73,11 @@ resolve_api_key() {
     message=$(jq -r '.message // empty' <<<"${body}" 2>/dev/null || true)
     case "${status}" in
       401) echo "::error::KrakenKey rejected the GitHub OIDC token (${message:-invalid token}). Check that oidc-audience matches the KrakenKey API." ;;
-      403) echo "::error::${message:-No KrakenKey trust policy matches this repository.} Create one in the KrakenKey dashboard, or check its branch, tag and environment conditions." ;;
-      409) echo "::error::${message:-Several trust policies match this repository.} Set the trust-id input to one of: $(jq -r '.trustIds // [] | join(", ")' <<<"${body}" 2>/dev/null)" ;;
+      # The API's messages have no final period; add one before the hint.
+      403) message=${message:-No KrakenKey trust policy matches this repository}
+           echo "::error::${message%.}. Create one in the KrakenKey dashboard, or check its branch, tag and environment conditions." ;;
+      409) message=${message:-Several trust policies match this repository}
+           echo "::error::${message%.}. Set the trust-id input to one of: $(jq -r '.trustIds // [] | join(", ")' <<<"${body}" 2>/dev/null)" ;;
       *)   echo "::error::GitHub OIDC exchange failed with HTTP ${status}${message:+: ${message}}" ;;
     esac
     exit 1
