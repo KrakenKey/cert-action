@@ -265,6 +265,15 @@ execute_download() {
     cert download "${INPUT_CERT_ID}" \
     --format fullchain \
     --out "${INPUT_FULLCHAIN_PATH}" 2>/dev/null || true
+
+  # cert download prints where it saved the file, not the certificate, so
+  # finish with the certificate itself for set_outputs (cert-id, status, and
+  # the details behind expires, domain and the rest).
+  KK_API_KEY="${INPUT_API_KEY}" krakenkey \
+    --api-url "${INPUT_API_URL}" \
+    --output json \
+    --no-color \
+    cert show "${INPUT_CERT_ID}"
 }
 
 # ── 5. Parse output and set Action outputs ───────────────────────
