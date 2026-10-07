@@ -52,7 +52,7 @@ inputs:
     required: false
     default: ''
   auto-renew:
-    description: "Server-side auto-renewal for the issued certificate. 'false' turns it off; with CLI versions before the fix for KrakenKey/cli#60 it stays on"
+    description: "Server-side auto-renewal for the issued certificate. 'false' turns it off; with cli-version older than v0.8.1 it stays on"
     required: false
     default: 'true'
 
