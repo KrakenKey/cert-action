@@ -65,7 +65,7 @@ out=$(INPUT_API_KEY='' INPUT_TRUST_ID=t2 ACTIONS_ID_TOKEN_REQUEST_URL='https://g
 if [[ "$(cat "${tmp}/body")" == '{"token":"gh.oidc.jwt","trustId":"t2"}' ]]; then ok "sends trust-id when set"; else fail "trust-id body: $(cat "${tmp}/body")"; fi
 
 # Errors
-for case in "401:oidc-audience" "403:Create one in the KrakenKey dashboard" "409:trust-id input to one of: t1, t2"; do
+for case in "401:oidc-audience" "403:ref and environment. Create one in the KrakenKey dashboard" "409:trust-id input to one of: t1, t2"; do
   code=${case%%:*}; want=${case#*:}
   out=$(FAKE_STATUS=${code} INPUT_API_KEY='' INPUT_TRUST_ID='' ACTIONS_ID_TOKEN_REQUEST_URL='https://gh.test/token?v=1' ACTIONS_ID_TOKEN_REQUEST_TOKEN=req run || true)
   if [[ "${out}" == *"${want}"* && "${out}" != *"KEY="* ]]; then ok "HTTP ${code} explained"; else fail "HTTP ${code}: ${out}"; fi
