@@ -7,7 +7,6 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 ## [Unreleased]
 
 ### Fixed
-
 - `download` now sets the `cert-id`, `status`, `expires`, `domain` and other certificate outputs. They were empty because `krakenkey cert download` reports the saved file, not the certificate.
 - GitHub OIDC errors no longer run the API's message into the hint ("...ref and environment Create one..."). (#39)
 
