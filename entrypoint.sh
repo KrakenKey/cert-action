@@ -162,7 +162,13 @@ execute_issue() {
     --chain-out "${INPUT_CHAIN_PATH}"
     --fullchain-out "${INPUT_FULLCHAIN_PATH}"
   )
-  [[ "${INPUT_AUTO_RENEW}" == "true" ]] && args+=(--auto-renew)
+  # Always pass the value: the API turns auto-renew on by default, so leaving
+  # the flag out for 'false' would leave it on.
+  if [[ "${INPUT_AUTO_RENEW,,}" == "false" ]]; then
+    args+=(--auto-renew=false)
+  else
+    args+=(--auto-renew=true)
+  fi
   [[ "${INPUT_WAIT}" == "true" ]] && args+=(--wait)
   local -a sans=()
   mapfile -t sans < <(san_args "${INPUT_SAN:-}")
