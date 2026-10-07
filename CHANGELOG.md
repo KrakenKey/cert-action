@@ -6,9 +6,13 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+---
+
+## [v1.4.1] — 2026-10-07
+
 ### Fixed
-- `auto-renew: 'false'` is now passed to the CLI as `--auto-renew=false`. Before, the action only passed the flag for `true`, so the certificate kept the API default (auto-renew on). Turning it off also needs a CLI release with the fix for KrakenKey/cli#60.
-- `download` now sets the `cert-id`, `status`, `expires`, `domain` and other certificate outputs. They were empty because `krakenkey cert download` reports the saved file, not the certificate.
+- `auto-renew: 'false'` is now passed to the CLI as `--auto-renew=false`. Before, the action only passed the flag for `true`, so the certificate kept the API default (auto-renew on). Turning it off also needs krakenkey-cli v0.8.1 or later, which the action installs by default (`cli-version: latest`). (#42)
+- `download` now sets the `cert-id`, `status`, `expires`, `domain` and other certificate outputs. They were empty because `krakenkey cert download` reports the saved file, not the certificate. (#40)
 - GitHub OIDC errors no longer run the API's message into the hint ("...ref and environment Create one..."). (#39)
 
 ---
