@@ -102,7 +102,15 @@ Generates a CSR locally, submits it to the KrakenKey API, waits for issuance (~4
 
 Triggers renewal of an existing certificate by ID, waits for completion, and downloads the new certificate and chain files.
 
-Without `if-due`, every run issues a new certificate and counts against your monthly limit. For scheduled workflows set `if-due: true`: the certificate is renewed only once it is inside your plan's renewal window (5 days on Free, 30 days on paid plans). On other runs nothing is renewed, the current certificate is still downloaded to the output paths, and the `renewed` output is `false`, so later steps can skip deploying.
+Without `if-due`, every run issues a new certificate and counts against your monthly limit. For scheduled workflows set `if-due: true`: the certificate is renewed only once it is inside your plan's renewal window (5 days on Free, 30 days on paid plans). On other runs nothing is renewed, the current certificate is still downloaded to the output paths, and the `renewed` output is `false`, so later steps can skip deploying. If a renewal is already running (started by KrakenKey, the dashboard or another workflow), krakenkey-cli releases from KrakenKey/cli#65 on wait for it and download its result instead of skipping; older releases skip it with `renewed: false`.
+
+If the renewal fails, the step fails and nothing is downloaded. When the current certificate is still valid, KrakenKey keeps it after a failed renewal: it stays `issued` with the old certificate, and KrakenKey records the reason. The action checks for this after waiting (it compares the certificate before and after the renewal), so it works with any `cli-version`:
+
+```
+Error: Renewal of certificate 42 failed: CAA record for example.com prevents issuance. The current certificate is still in place (expires 2026-11-20T10:00:00Z). Fix the cause, then run renew again or retry the certificate in KrakenKey.
+```
+
+With `wait: false` the action does not wait, so it can't tell; check the certificate later with `command: download` or in the dashboard.
 
 **Required inputs:** `api-key`, `cert-id`
 
@@ -337,6 +345,7 @@ jobs:
 | `Invalid api-key format` | API key doesn't start with `kk_` | Use the API key from your KrakenKey dashboard |
 | `ACME challenge delegation missing` | No `_acme-challenge` CNAME for one of the names on the certificate | Create the CNAME named in the error (see [ACME challenge delegation](#acme-challenge-delegation)), then request the certificate again |
 | `ACME challenge delegation mismatch` | The `_acme-challenge` CNAME points somewhere else | Change the CNAME to the target named in the error, then request the certificate again |
+| `Renewal of certificate <id> failed: <reason>. The current certificate is still in place` | The renewal failed in KrakenKey, and KrakenKey kept the current, still valid certificate. Nothing was downloaded | Fix the cause named in the message, then run `renew` again, or retry the certificate in the dashboard and fetch it with `command: download`. Without a retry, KrakenKey tries again on its own after about a day |
 | `timed out after 10m0s waiting for certificate <id>` | The action stopped waiting after `poll-timeout` (default `10m`). KrakenKey keeps working on the request. Issuance usually takes 2 to 5 minutes, and each extra name in `san` adds DNS validation time | For `issue`: raise `poll-timeout` (for example `20m`) and run again. The timed-out request still counts against your plan limits, and its private key stayed on the runner, so it can't be reused. For `renew`: don't run `renew` again (the API only renews certificates in `issued` state). Wait until the certificate shows as issued, then fetch it with `command: download` and the same `cert-id` |
 
 ### ACME challenge delegation
@@ -354,7 +363,7 @@ The target is the name with dots replaced by dashes, under `acme.krakenkey.io`. 
 KrakenKey checks these records before it asks Let's Encrypt for a certificate. A missing or wrong record fails the step within the first poll or two instead of running until `poll-timeout`, and KrakenKey does not retry it, because only a DNS change can fix it. After fixing DNS:
 
 - `issue`: run the workflow again. If you only just created the record, allow a few minutes for DNS to update.
-- `renew`: the certificate is now in `failed` state, and `renew` only accepts `issued` certificates, so running `renew` again won't help. Retry it from the dashboard or with `krakenkey cert retry <id>`, then fetch it with `command: download`.
+- `renew`: if the current certificate is still valid, KrakenKey keeps it (status `issued`, with the reason recorded), so you can run `renew` again once DNS is fixed. If it had already expired, the certificate is now in `failed` state, and `renew` only accepts `issued` certificates, so running `renew` again won't help. Retry it from the dashboard or with `krakenkey cert retry <id>`, then fetch it with `command: download`.
 
 To check the records before running a workflow, use `krakenkey domain check example.com '*.example.com'` (CLI v0.5.0 or later) or `dig CNAME _acme-challenge.example.com +short`.
 

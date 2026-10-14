@@ -191,13 +191,47 @@ renew_outcome() {
   fi
 }
 
+# Prints the certificate as JSON (krakenkey cert show), or nothing when it
+# can't be read.
+show_cert() {
+  KK_API_KEY="${INPUT_API_KEY}" krakenkey \
+    --api-url "${INPUT_API_URL}" \
+    --output json \
+    --no-color \
+    cert show "$1" 2>/dev/null | jq -cs 'map(select(type == "object" and has("id"))) | last // empty' 2>/dev/null || true
+}
+
+# Fails the step when a renewal the action waited for left the certificate
+# issued with the same leaf as before: KrakenKey keeps a still-valid
+# certificate after a failed renewal (status issued, renewalFailedAt and
+# failureReason set) instead of moving it to failed. CLI releases that know
+# about this already exit 1; this also covers older ones (cli-version).
+# $1 is the leaf PEM from before the renewal; empty skips the check.
+check_renewal_result() {
+  local before_pem="$1" after reason expires
+  [[ -n "${before_pem}" ]] || return 0
+  after=$(show_cert "${INPUT_CERT_ID}")
+  [[ -n "${after}" ]] || return 0
+  if [[ "$(jq -r '.status // empty' <<<"${after}")" != "issued" ]] ||
+     [[ "$(jq -r '.crtPem // empty' <<<"${after}")" != "${before_pem}" ]]; then
+    return 0
+  fi
+  reason=$(jq -r '.failureReason // empty' <<<"${after}")
+  expires=$(jq -r '.expiresAt // empty' <<<"${after}")
+  echo "::error::Renewal of certificate ${INPUT_CERT_ID} failed${reason:+: ${reason}}. The current certificate is still in place${expires:+ (expires ${expires})}. Fix the cause, then run renew again or retry the certificate in KrakenKey." >&2
+  return 1
+}
+
 execute_renew() {
-  local result rc=0 renew_args=() workdir
+  local result rc=0 renew_args=() workdir before_pem=""
   [[ "${INPUT_WAIT}" == "true" ]] && renew_args+=(--wait)
   [[ "${INPUT_IF_DUE:-false}" == "true" ]] && renew_args+=(--if-due)
   # CLI v0.7.0+ saves ./<cn>.crt and friends after renew --wait. The action
   # downloads to its own output paths below, so run renew in a scratch
   # directory to keep those copies out of the workspace.
+  if [[ "${INPUT_WAIT}" == "true" ]]; then
+    before_pem=$(jq -r '.crtPem // empty' <<<"$(show_cert "${INPUT_CERT_ID}")" 2>/dev/null || true)
+  fi
   workdir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/krakenkey-renew.XXXXXX")
   # Capture output but never let a CLI failure abort before we can print it.
   # Under set -e, a plain result=$(...) exits on failure and the CLI's error
@@ -213,8 +247,11 @@ execute_renew() {
   rm -rf "${workdir}"
   echo "${result}"
   if [[ "${rc}" -ne 0 ]]; then
-    echo "::error::krakenkey cert renew exited with code ${rc}"
+    echo "::error::krakenkey cert renew exited with code ${rc}" >&2
     exit "${rc}"
+  fi
+  if [[ "${INPUT_WAIT}" == "true" && "$(renew_outcome "${result}")" == "true" ]]; then
+    check_renewal_result "${before_pem}" || exit 1
   fi
 
   # With --wait the CLI prints the initial response ("renewing") and only
