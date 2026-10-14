@@ -6,6 +6,13 @@ Notable changes to the KrakenKey cert-action. Format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+- `renew` with `wait: true` fails the step when the renewal failed but KrakenKey kept the current certificate. Newer KrakenKey APIs (KrakenKey/app#201) leave a still-valid certificate `issued` after a failed renewal, with the old certificate and the reason, instead of moving it to `failed`. The action read that as a successful renewal: it set `renewed` to `true` and downloaded the old certificate. It now reads the certificate before and after the renewal, and when the leaf is unchanged it fails with `Renewal of certificate <id> failed: <reason>. The current certificate is still in place (expires <date>).` and downloads nothing. This works with every `cli-version`; krakenkey-cli releases from KrakenKey/cli#65 on also exit 1 themselves.
+- The `::error::krakenkey cert renew exited with code <n>` annotation is written to stderr, so it shows in the log. It went to the captured output before and was lost.
+
+### Changed
+- With `if-due: true` and a renewal already running, krakenkey-cli releases from KrakenKey/cli#65 on wait for that renewal and download its result (`renewed: true`) instead of skipping. The action installs the latest CLI by default; pin `cli-version` to that release or later to get it with a pinned version.
+
 ---
 
 ## [v1.4.1] — 2026-10-07
