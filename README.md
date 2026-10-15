@@ -376,4 +376,4 @@ To check the records before running a workflow, use `krakenkey domain check exam
 
 ## License
 
-[AGPL-3.0](LICENSE)
+Copyright (C) 2026 KrakenKey LLC. Licensed under [AGPL-3.0](LICENSE).
